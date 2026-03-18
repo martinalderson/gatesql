@@ -150,6 +150,10 @@ public class PgProtocolHandler : IDisposable
                     return;
                 }
 
+                // Disable Nagle's algorithm for lower latency on small writes
+                if (client.Client != null)
+                    client.Client.NoDelay = true;
+
                 // Phase 5: Send auth OK + params + ready to client
                 await PgMessageWriter.WriteAuthOkAsync(clientStream, ct);
                 await PgMessageWriter.WriteParameterStatusAsync(clientStream, "server_version", "16.0", ct);
@@ -219,10 +223,12 @@ public class PgProtocolHandler : IDisposable
         try
         {
             bool discardUntilSync = false;
+            int messageCount = 0;
 
             while (!proxyCts.Token.IsCancellationRequested)
             {
-                if (!_sessionManager.ValidateSession(session.SessionId))
+                // Check session validity every 100 messages instead of every message
+                if (++messageCount % 100 == 0 && !_sessionManager.ValidateSession(session.SessionId))
                 {
                     await PgMessageWriter.WriteErrorResponseAsync(clientStream, "FATAL", "57P01",
                         "Session expired or revoked", proxyCts.Token);
@@ -333,6 +339,7 @@ public class PgProtocolHandler : IDisposable
 
                 // Forward to upstream
                 await PgMessageWriter.WriteRawAsync(upstreamStream, type, payload, proxyCts.Token);
+                await upstreamStream.FlushAsync(proxyCts.Token);
             }
         }
         finally
@@ -364,7 +371,10 @@ public class PgProtocolHandler : IDisposable
                 else if (type == PgMessageTypes.ServerErrorResponse)
                     onError();
                 else if (type == PgMessageTypes.ServerReadyForQuery)
+                {
+                    await clientStream.FlushAsync(ct);
                     onReadyForQuery();
+                }
             }
         }
         catch (OperationCanceledException) { }

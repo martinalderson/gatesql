@@ -7,25 +7,22 @@ public static class PgMessageReader
 {
     public static async Task<(byte type, byte[] payload)?> ReadMessageAsync(Stream stream, CancellationToken ct = default)
     {
-        var typeBuf = new byte[1];
-        if (await ReadExactAsync(stream, typeBuf, ct) != 1)
+        // Read type + length in a single 5-byte read
+        var header = new byte[5];
+        if (await ReadExactAsync(stream, header, ct) != 5)
             return null;
 
-        var lengthBuf = new byte[4];
-        if (await ReadExactAsync(stream, lengthBuf, ct) != 4)
-            return null;
-
-        int length = BinaryPrimitives.ReadInt32BigEndian(lengthBuf);
+        int length = BinaryPrimitives.ReadInt32BigEndian(header.AsSpan(1));
         int payloadLength = length - 4;
 
-        if (payloadLength < 0 || payloadLength > 100 * 1024 * 1024) // 100MB sanity limit
+        if (payloadLength < 0 || payloadLength > 100 * 1024 * 1024)
             throw new InvalidOperationException($"Invalid message length: {length}");
 
         var payload = new byte[payloadLength];
         if (payloadLength > 0 && await ReadExactAsync(stream, payload, ct) != payloadLength)
             return null;
 
-        return (typeBuf[0], payload);
+        return (header[0], payload);
     }
 
     public static async Task<(int version, Dictionary<string, string> parameters)?> ReadStartupMessageAsync(Stream stream, CancellationToken ct = default)
@@ -95,7 +92,7 @@ public static class PgMessageReader
             offset++;
         var result = Encoding.UTF8.GetString(data, start, offset - start);
         if (offset < data.Length)
-            offset++; // skip null terminator
+            offset++;
         return result;
     }
 

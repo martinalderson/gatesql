@@ -12,17 +12,19 @@ public static class PgMessageWriter
         BinaryPrimitives.WriteInt32BigEndian(buffer.AsSpan(1), payload.Length + 4);
         payload.CopyTo(buffer.AsSpan(5));
         await stream.WriteAsync(buffer, ct);
-        await stream.FlushAsync(ct);
     }
 
     public static async Task WriteRawAsync(Stream stream, byte type, byte[] payload, CancellationToken ct = default)
     {
-        // Write type byte + original length prefix + payload (for forwarding messages as-is)
-        var header = new byte[5];
-        header[0] = type;
-        BinaryPrimitives.WriteInt32BigEndian(header.AsSpan(1), payload.Length + 4);
-        await stream.WriteAsync(header, ct);
-        await stream.WriteAsync(payload, ct);
+        var buffer = new byte[5 + payload.Length];
+        buffer[0] = type;
+        BinaryPrimitives.WriteInt32BigEndian(buffer.AsSpan(1), payload.Length + 4);
+        payload.CopyTo(buffer, 5);
+        await stream.WriteAsync(buffer, ct);
+    }
+
+    public static async Task FlushAsync(Stream stream, CancellationToken ct = default)
+    {
         await stream.FlushAsync(ct);
     }
 
@@ -37,6 +39,7 @@ public static class PgMessageWriter
         var payload = new byte[4];
         BinaryPrimitives.WriteInt32BigEndian(payload, PgMessageTypes.AuthCleartextPassword);
         await WriteMessageAsync(stream, PgMessageTypes.ServerAuth, payload, ct);
+        await stream.FlushAsync(ct);
     }
 
     public static async Task WriteAuthOkAsync(Stream stream, CancellationToken ct = default)
@@ -67,6 +70,7 @@ public static class PgMessageWriter
     public static async Task WriteReadyForQueryAsync(Stream stream, byte status = PgMessageTypes.TransactionIdle, CancellationToken ct = default)
     {
         await WriteMessageAsync(stream, PgMessageTypes.ServerReadyForQuery, [status], ct);
+        await stream.FlushAsync(ct);
     }
 
     public static async Task WriteErrorResponseAsync(Stream stream, string severity, string code, string message, CancellationToken ct = default)
@@ -84,9 +88,10 @@ public static class PgMessageWriter
         WriteField((byte)'V', severity);
         WriteField((byte)'C', code);
         WriteField((byte)'M', message);
-        ms.WriteByte(0); // terminator
+        ms.WriteByte(0);
 
         await WriteMessageAsync(stream, PgMessageTypes.ServerErrorResponse, ms.ToArray(), ct);
+        await stream.FlushAsync(ct);
     }
 
     public static async Task WriteNoticeResponseAsync(Stream stream, string message, CancellationToken ct = default)
@@ -112,16 +117,13 @@ public static class PgMessageWriter
     public static byte[] BuildStartupMessage(string user, string database)
     {
         using var ms = new MemoryStream();
-        // Length placeholder (4 bytes) - will fill in at the end
         ms.Write(new byte[4]);
-        // Protocol version 3.0
         var versionBuf = new byte[4];
         BinaryPrimitives.WriteInt32BigEndian(versionBuf, PgMessageTypes.ProtocolVersion30);
         ms.Write(versionBuf);
-        // Parameters
         WriteParam(ms, "user", user);
         WriteParam(ms, "database", database);
-        ms.WriteByte(0); // end marker
+        ms.WriteByte(0);
 
         var result = ms.ToArray();
         BinaryPrimitives.WriteInt32BigEndian(result.AsSpan(0), result.Length);
