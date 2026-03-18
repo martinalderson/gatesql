@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DbProxy/DbProxy.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DbProxy.Tests/DbProxy.Tests.csproj" />
+  </Folder>
+</Solution>

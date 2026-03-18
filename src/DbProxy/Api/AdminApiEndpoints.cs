@@ -1,0 +1,149 @@
+using System.Text.Json.Serialization;
+using DbProxy.Auth;
+using DbProxy.Configuration;
+using DbProxy.Query;
+
+namespace DbProxy.Api;
+
+public static class AdminApiEndpoints
+{
+    public static void MapAdminApi(this WebApplication app, ProxyConfig config, JwtAuthenticator jwtAuth, SessionManager sessionManager, QueryLogger queryLogger)
+    {
+        var api = app.MapGroup("/api");
+
+        api.MapPost("/sessions", (CreateSessionRequest request, HttpContext ctx) =>
+        {
+            var apiKey = ctx.Request.Headers["X-Api-Key"].FirstOrDefault();
+            if (string.IsNullOrEmpty(apiKey) || !config.Auth.ParentApiKeys.Any(k => k.Key == apiKey))
+                return Results.Json(new { error = "Invalid API key" }, statusCode: 401);
+
+            var sessionId = $"sess_{Guid.NewGuid():N}";
+            var lifetime = TimeSpan.FromMinutes(config.Auth.HardCapMinutes);
+            var expiresAt = DateTime.UtcNow.Add(lifetime);
+
+            var session = sessionManager.CreateSession(
+                sessionId,
+                request.AgentId,
+                request.Task,
+                request.QueryBudget,
+                expiresAt);
+
+            var token = jwtAuth.GenerateToken(
+                sessionId,
+                request.AgentId,
+                request.Task,
+                request.QueryBudget,
+                lifetime);
+
+            return Results.Json(new CreateSessionResponse
+            {
+                Token = token,
+                SessionId = sessionId,
+                ExpiresAt = expiresAt,
+            });
+        });
+
+        api.MapGet("/sessions", (HttpContext ctx) =>
+        {
+            var apiKey = ctx.Request.Headers["X-Api-Key"].FirstOrDefault();
+            if (string.IsNullOrEmpty(apiKey) || !config.Auth.ParentApiKeys.Any(k => k.Key == apiKey))
+                return Results.Json(new { error = "Invalid API key" }, statusCode: 401);
+
+            var sessions = sessionManager.GetAllSessions()
+                .Select(s => new SessionDto
+                {
+                    SessionId = s.SessionId,
+                    AgentId = s.AgentId,
+                    Task = s.Task,
+                    QueryBudget = s.QueryBudget,
+                    QueriesUsed = s.QueriesUsed,
+                    CreatedAt = s.CreatedAt,
+                    ExpiresAt = s.ExpiresAt,
+                    LastActivityAt = s.LastActivityAt,
+                    IsConnected = s.IsConnected,
+                    IsRevoked = s.IsRevoked,
+                });
+
+            return Results.Json(sessions);
+        });
+
+        api.MapDelete("/sessions/{sessionId}", (string sessionId, HttpContext ctx) =>
+        {
+            var apiKey = ctx.Request.Headers["X-Api-Key"].FirstOrDefault();
+            if (string.IsNullOrEmpty(apiKey) || !config.Auth.ParentApiKeys.Any(k => k.Key == apiKey))
+                return Results.Json(new { error = "Invalid API key" }, statusCode: 401);
+
+            if (sessionManager.RevokeSession(sessionId))
+                return Results.Ok(new { message = "Session revoked" });
+
+            return Results.NotFound(new { error = "Session not found" });
+        });
+
+        api.MapGet("/queries", (HttpContext ctx, int? count) =>
+        {
+            var apiKey = ctx.Request.Headers["X-Api-Key"].FirstOrDefault();
+            if (string.IsNullOrEmpty(apiKey) || !config.Auth.ParentApiKeys.Any(k => k.Key == apiKey))
+                return Results.Json(new { error = "Invalid API key" }, statusCode: 401);
+
+            var queries = queryLogger.GetRecentQueries(count ?? 100);
+            return Results.Json(queries);
+        });
+    }
+}
+
+public class CreateSessionRequest
+{
+    [JsonPropertyName("agentId")]
+    public string AgentId { get; set; } = "";
+
+    [JsonPropertyName("task")]
+    public string Task { get; set; } = "";
+
+    [JsonPropertyName("queryBudget")]
+    public int? QueryBudget { get; set; }
+}
+
+public class CreateSessionResponse
+{
+    [JsonPropertyName("token")]
+    public string Token { get; set; } = "";
+
+    [JsonPropertyName("sessionId")]
+    public string SessionId { get; set; } = "";
+
+    [JsonPropertyName("expiresAt")]
+    public DateTime ExpiresAt { get; set; }
+}
+
+public class SessionDto
+{
+    [JsonPropertyName("sessionId")]
+    public string SessionId { get; set; } = "";
+
+    [JsonPropertyName("agentId")]
+    public string AgentId { get; set; } = "";
+
+    [JsonPropertyName("task")]
+    public string Task { get; set; } = "";
+
+    [JsonPropertyName("queryBudget")]
+    public int? QueryBudget { get; set; }
+
+    [JsonPropertyName("queriesUsed")]
+    public int QueriesUsed { get; set; }
+
+    [JsonPropertyName("createdAt")]
+    public DateTime CreatedAt { get; set; }
+
+    [JsonPropertyName("expiresAt")]
+    public DateTime ExpiresAt { get; set; }
+
+    [JsonPropertyName("lastActivityAt")]
+    public DateTime LastActivityAt { get; set; }
+
+    [JsonPropertyName("isConnected")]
+    public bool IsConnected { get; set; }
+
+    [JsonPropertyName("isRevoked")]
+    public bool IsRevoked { get; set; }
+}
