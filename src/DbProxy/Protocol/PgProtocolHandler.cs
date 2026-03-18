@@ -111,11 +111,14 @@ public class PgProtocolHandler : IDisposable
                 // Phase 2: Request password (which is the JWT)
                 await PgMessageWriter.WriteAuthCleartextPasswordAsync(clientStream, ct);
 
-                var passwordMsg = await PgMessageReader.ReadMessageAsync(clientStream, ct);
+                var authHeaderBuf = new byte[5];
+                var passwordMsg = await PgMessageReader.ReadMessageAsync(clientStream, authHeaderBuf, ct);
                 if (passwordMsg == null || passwordMsg.Value.type != PgMessageTypes.ClientPassword)
                     return;
 
-                var jwt = PgMessageReader.ReadPasswordFromPayload(passwordMsg.Value.payload);
+                var pwPayloadLen = PgMessageReader.GetPayloadLength(authHeaderBuf);
+                var jwt = PgMessageReader.ReadPasswordFromPayload(passwordMsg.Value.payload.AsSpan(0, pwPayloadLen));
+                PgMessageReader.ReturnPayload(passwordMsg.Value.payload);
 
                 // Phase 3: Validate JWT
                 var claims = _jwtAuth.ValidateToken(jwt);
@@ -190,14 +193,17 @@ public class PgProtocolHandler : IDisposable
         int rowCount = 0;
         bool errorOccurred = false;
 
+        // Per-connection reusable header buffers
+        var clientHeaderBuf = new byte[5];
+        var upstreamHeaderBuf = new byte[5];
+
         // Bidirectional relay: client→upstream in this task, upstream→client in background
         using var proxyCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        var upstreamToClient = RelayUpstreamToClientAsync(upstreamStream, clientStream, session, claims,
+        var upstreamToClient = RelayUpstreamToClientAsync(upstreamStream, clientStream, upstreamHeaderBuf,
             () => rowCount++,
             () => errorOccurred = true,
             () =>
             {
-                // ReadyForQuery received — log the completed query
                 sw.Stop();
                 if (currentQuery != null)
                 {
@@ -227,7 +233,6 @@ public class PgProtocolHandler : IDisposable
 
             while (!proxyCts.Token.IsCancellationRequested)
             {
-                // Check session validity every 100 messages instead of every message
                 if (++messageCount % 100 == 0 && !_sessionManager.ValidateSession(session.SessionId))
                 {
                     await PgMessageWriter.WriteErrorResponseAsync(clientStream, "FATAL", "57P01",
@@ -235,111 +240,109 @@ public class PgProtocolHandler : IDisposable
                     return;
                 }
 
-                var msg = await PgMessageReader.ReadMessageAsync(clientStream, proxyCts.Token);
+                var msg = await PgMessageReader.ReadMessageAsync(clientStream, clientHeaderBuf, proxyCts.Token);
                 if (msg == null)
                     return;
 
                 var (type, payload) = msg.Value;
+                int payloadLength = PgMessageReader.GetPayloadLength(clientHeaderBuf);
 
-                if (type == PgMessageTypes.ClientTerminate)
+                try
                 {
-                    await PgMessageWriter.WriteRawAsync(upstreamStream, type, payload, proxyCts.Token);
-                    return;
-                }
-
-                // When discarding after a rejected query, eat messages until Sync
-                if (discardUntilSync)
-                {
-                    if (type == PgMessageTypes.ClientSync)
+                    if (type == PgMessageTypes.ClientTerminate)
                     {
-                        discardUntilSync = false;
-                        await PgMessageWriter.WriteReadyForQueryAsync(clientStream, ct: proxyCts.Token);
+                        await PgMessageWriter.WriteRawAsync(upstreamStream, type, payload, payloadLength, proxyCts.Token);
+                        await upstreamStream.FlushAsync(proxyCts.Token);
+                        return;
                     }
-                    continue;
-                }
 
-                // Extract query text from Simple Query or Parse messages
-                string? queryText = null;
-                if (type == PgMessageTypes.ClientSimpleQuery)
-                    queryText = PgMessageReader.ReadQueryFromPayload(payload);
-                else if (type == PgMessageTypes.ClientParse)
-                    queryText = PgMessageReader.ReadParseStatementFromPayload(payload);
-
-                if (queryText != null)
-                {
-                    // Enforce purpose comment (skip internal driver queries)
-                    if (!SqlCommentParser.IsBudgetCheck(queryText)
-                        && !IsInternalQuery(queryText)
-                        && SqlCommentParser.ExtractPurpose(queryText) == null)
+                    if (discardUntilSync)
                     {
-                        var rejectMsg = "Query rejected: missing purpose comment. Add /* <agent_purpose>your reason</agent_purpose> */ to your SQL.";
-                        await PgMessageWriter.WriteErrorResponseAsync(clientStream, "ERROR", "42000", rejectMsg, proxyCts.Token);
-
-                        _queryLogger.Log(new QueryLogEntry
+                        if (type == PgMessageTypes.ClientSync)
                         {
-                            AgentId = claims.AgentId,
-                            SessionId = claims.SessionId,
-                            Task = claims.Task,
-                            Query = queryText,
-                            RowCount = 0,
-                            DurationMs = 0,
-                            Success = false,
-                            Error = "Missing purpose comment",
-                        });
-
-                        // For extended protocol (Parse), discard until Sync
-                        if (type == PgMessageTypes.ClientParse)
-                        {
-                            discardUntilSync = true;
-                        }
-                        else
-                        {
-                            // Simple query — just send ReadyForQuery
+                            discardUntilSync = false;
                             await PgMessageWriter.WriteReadyForQueryAsync(clientStream, ct: proxyCts.Token);
                         }
                         continue;
                     }
 
-                    // Budget check
-                    if (SqlCommentParser.IsBudgetCheck(queryText))
-                    {
-                        var remaining = _sessionManager.GetRemainingBudget(session.SessionId);
-                        var budgetMsg = remaining.HasValue
-                            ? $"Query budget remaining: {remaining.Value}"
-                            : "No query budget set (unlimited)";
-                        await PgMessageWriter.WriteNoticeResponseAsync(clientStream, budgetMsg, proxyCts.Token);
-                    }
+                    string? queryText = null;
+                    if (type == PgMessageTypes.ClientSimpleQuery)
+                        queryText = PgMessageReader.ReadQueryFromPayload(payload, payloadLength);
+                    else if (type == PgMessageTypes.ClientParse)
+                        queryText = PgMessageReader.ReadParseStatementFromPayload(payload, payloadLength);
 
-                    if (!_sessionManager.IncrementQueryCount(session.SessionId))
+                    if (queryText != null)
                     {
-                        _queryLogger.Log(new QueryLogEntry
+                        if (!SqlCommentParser.IsBudgetCheck(queryText)
+                            && !IsInternalQuery(queryText)
+                            && SqlCommentParser.ExtractPurpose(queryText) == null)
                         {
-                            AgentId = claims.AgentId,
-                            SessionId = claims.SessionId,
-                            Task = claims.Task,
-                            Query = queryText,
-                            RowCount = 0,
-                            DurationMs = 0,
-                            Success = false,
-                            Error = "Budget exhausted",
-                        });
-                        await PgMessageWriter.WriteErrorResponseAsync(clientStream, "FATAL", "53400",
-                            "Query budget exhausted for this session", proxyCts.Token);
-                        return;
+                            await PgMessageWriter.WriteErrorResponseAsync(clientStream, "ERROR", "42000",
+                                "Query rejected: missing purpose comment. Add /* <agent_purpose>your reason</agent_purpose> */ to your SQL.", proxyCts.Token);
+
+                            _queryLogger.Log(new QueryLogEntry
+                            {
+                                AgentId = claims.AgentId,
+                                SessionId = claims.SessionId,
+                                Task = claims.Task,
+                                Query = queryText,
+                                RowCount = 0,
+                                DurationMs = 0,
+                                Success = false,
+                                Error = "Missing purpose comment",
+                            });
+
+                            if (type == PgMessageTypes.ClientParse)
+                                discardUntilSync = true;
+                            else
+                                await PgMessageWriter.WriteReadyForQueryAsync(clientStream, ct: proxyCts.Token);
+                            continue;
+                        }
+
+                        if (SqlCommentParser.IsBudgetCheck(queryText))
+                        {
+                            var remaining = _sessionManager.GetRemainingBudget(session.SessionId);
+                            var budgetMsg = remaining.HasValue
+                                ? $"Query budget remaining: {remaining.Value}"
+                                : "No query budget set (unlimited)";
+                            await PgMessageWriter.WriteNoticeResponseAsync(clientStream, budgetMsg, proxyCts.Token);
+                        }
+
+                        if (!_sessionManager.IncrementQueryCount(session.SessionId))
+                        {
+                            _queryLogger.Log(new QueryLogEntry
+                            {
+                                AgentId = claims.AgentId,
+                                SessionId = claims.SessionId,
+                                Task = claims.Task,
+                                Query = queryText,
+                                RowCount = 0,
+                                DurationMs = 0,
+                                Success = false,
+                                Error = "Budget exhausted",
+                            });
+                            await PgMessageWriter.WriteErrorResponseAsync(clientStream, "FATAL", "53400",
+                                "Query budget exhausted for this session", proxyCts.Token);
+                            return;
+                        }
+
+                        _sessionManager.TouchSession(session.SessionId);
+
+                        currentQuery = queryText;
+                        currentContext = SqlCommentParser.ExtractContext(queryText);
+                        if (currentContext.Count == 0) currentContext = null;
+                        sw.Restart();
                     }
 
-                    _sessionManager.TouchSession(session.SessionId);
-
-                    // Start tracking this query
-                    currentQuery = queryText;
-                    currentContext = SqlCommentParser.ExtractContext(queryText);
-                    if (currentContext.Count == 0) currentContext = null;
-                    sw.Restart();
+                    // Forward to upstream
+                    await PgMessageWriter.WriteRawAsync(upstreamStream, type, payload, payloadLength, proxyCts.Token);
+                    await upstreamStream.FlushAsync(proxyCts.Token);
                 }
-
-                // Forward to upstream
-                await PgMessageWriter.WriteRawAsync(upstreamStream, type, payload, proxyCts.Token);
-                await upstreamStream.FlushAsync(proxyCts.Token);
+                finally
+                {
+                    PgMessageReader.ReturnPayload(payload);
+                }
             }
         }
         finally
@@ -350,8 +353,7 @@ public class PgProtocolHandler : IDisposable
     }
 
     private static async Task RelayUpstreamToClientAsync(
-        Stream upstreamStream, Stream clientStream,
-        AgentSession session, JwtClaims claims,
+        Stream upstreamStream, Stream clientStream, byte[] headerBuf,
         Action onDataRow, Action onError, Action onReadyForQuery,
         CancellationToken ct)
     {
@@ -359,21 +361,30 @@ public class PgProtocolHandler : IDisposable
         {
             while (!ct.IsCancellationRequested)
             {
-                var msg = await PgMessageReader.ReadMessageAsync(upstreamStream, ct);
+                var msg = await PgMessageReader.ReadMessageAsync(upstreamStream, headerBuf, ct);
                 if (msg == null)
                     return;
 
                 var (type, payload) = msg.Value;
-                await PgMessageWriter.WriteRawAsync(clientStream, type, payload, ct);
+                int payloadLength = PgMessageReader.GetPayloadLength(headerBuf);
 
-                if (type == PgMessageTypes.ServerDataRow)
-                    onDataRow();
-                else if (type == PgMessageTypes.ServerErrorResponse)
-                    onError();
-                else if (type == PgMessageTypes.ServerReadyForQuery)
+                try
                 {
-                    await clientStream.FlushAsync(ct);
-                    onReadyForQuery();
+                    await PgMessageWriter.WriteRawAsync(clientStream, type, payload, payloadLength, ct);
+
+                    if (type == PgMessageTypes.ServerDataRow)
+                        onDataRow();
+                    else if (type == PgMessageTypes.ServerErrorResponse)
+                        onError();
+                    else if (type == PgMessageTypes.ServerReadyForQuery)
+                    {
+                        await clientStream.FlushAsync(ct);
+                        onReadyForQuery();
+                    }
+                }
+                finally
+                {
+                    PgMessageReader.ReturnPayload(payload);
                 }
             }
         }
@@ -396,17 +407,19 @@ public class PgProtocolHandler : IDisposable
             await stream.FlushAsync(ct);
 
             // Read auth response
+            var hdrBuf = new byte[5];
             while (true)
             {
-                var msg = await PgMessageReader.ReadMessageAsync(stream, ct);
+                var msg = await PgMessageReader.ReadMessageAsync(stream, hdrBuf, ct);
                 if (msg == null)
                     return null;
 
                 var (type, payload) = msg.Value;
+                var pLen = PgMessageReader.GetPayloadLength(hdrBuf);
 
                 if (type == PgMessageTypes.ServerAuth)
                 {
-                    int authType = System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(payload);
+                    int authType = System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(payload.AsSpan(0, pLen));
                     if (authType == PgMessageTypes.AuthCleartextPassword)
                     {
                         var passwordMsg = PgMessageWriter.BuildPasswordMessage(_config.Upstream.Password);
@@ -428,19 +441,23 @@ public class PgProtocolHandler : IDisposable
                     else
                     {
                         _logger.LogError("Unsupported upstream auth type: {AuthType}", authType);
+                        PgMessageReader.ReturnPayload(payload);
                         return null;
                     }
                 }
                 else if (type == PgMessageTypes.ServerErrorResponse)
                 {
                     _logger.LogError("Upstream auth failed");
+                    PgMessageReader.ReturnPayload(payload);
                     return null;
                 }
                 else if (type == PgMessageTypes.ServerReadyForQuery)
                 {
+                    PgMessageReader.ReturnPayload(payload);
                     return stream;
                 }
                 // Skip ParameterStatus, BackendKeyData, etc.
+                PgMessageReader.ReturnPayload(payload);
             }
         }
         catch (Exception ex)

@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Text;
 
@@ -7,25 +8,34 @@ public static class PgMessageWriter
 {
     public static async Task WriteMessageAsync(Stream stream, byte type, byte[] payload, CancellationToken ct = default)
     {
-        var buffer = new byte[1 + 4 + payload.Length];
-        buffer[0] = type;
-        BinaryPrimitives.WriteInt32BigEndian(buffer.AsSpan(1), payload.Length + 4);
-        payload.CopyTo(buffer.AsSpan(5));
-        await stream.WriteAsync(buffer, ct);
+        var buffer = ArrayPool<byte>.Shared.Rent(5 + payload.Length);
+        try
+        {
+            buffer[0] = type;
+            BinaryPrimitives.WriteInt32BigEndian(buffer.AsSpan(1), payload.Length + 4);
+            payload.AsSpan().CopyTo(buffer.AsSpan(5));
+            await stream.WriteAsync(buffer.AsMemory(0, 5 + payload.Length), ct);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
     }
 
-    public static async Task WriteRawAsync(Stream stream, byte type, byte[] payload, CancellationToken ct = default)
+    public static async Task WriteRawAsync(Stream stream, byte type, byte[] payload, int payloadLength, CancellationToken ct = default)
     {
-        var buffer = new byte[5 + payload.Length];
-        buffer[0] = type;
-        BinaryPrimitives.WriteInt32BigEndian(buffer.AsSpan(1), payload.Length + 4);
-        payload.CopyTo(buffer, 5);
-        await stream.WriteAsync(buffer, ct);
-    }
-
-    public static async Task FlushAsync(Stream stream, CancellationToken ct = default)
-    {
-        await stream.FlushAsync(ct);
+        var buffer = ArrayPool<byte>.Shared.Rent(5 + payloadLength);
+        try
+        {
+            buffer[0] = type;
+            BinaryPrimitives.WriteInt32BigEndian(buffer.AsSpan(1), payloadLength + 4);
+            payload.AsSpan(0, payloadLength).CopyTo(buffer.AsSpan(5));
+            await stream.WriteAsync(buffer.AsMemory(0, 5 + payloadLength), ct);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
     }
 
     public static async Task WriteSslResponseAsync(Stream stream, bool supported, CancellationToken ct = default)

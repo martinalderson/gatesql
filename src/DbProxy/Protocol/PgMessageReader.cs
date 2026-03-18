@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Text;
 
@@ -5,24 +6,47 @@ namespace DbProxy.Protocol;
 
 public static class PgMessageReader
 {
-    public static async Task<(byte type, byte[] payload)?> ReadMessageAsync(Stream stream, CancellationToken ct = default)
+    public static async Task<(byte type, byte[] payload)?> ReadMessageAsync(Stream stream, byte[] headerBuf, CancellationToken ct = default)
     {
-        // Read type + length in a single 5-byte read
-        var header = new byte[5];
-        if (await ReadExactAsync(stream, header, ct) != 5)
+        // Read type + length in a single 5-byte read using caller's buffer
+        if (await ReadExactAsync(stream, headerBuf.AsMemory(0, 5), ct) != 5)
             return null;
 
-        int length = BinaryPrimitives.ReadInt32BigEndian(header.AsSpan(1));
+        int length = BinaryPrimitives.ReadInt32BigEndian(headerBuf.AsSpan(1));
         int payloadLength = length - 4;
 
         if (payloadLength < 0 || payloadLength > 100 * 1024 * 1024)
             throw new InvalidOperationException($"Invalid message length: {length}");
 
-        var payload = new byte[payloadLength];
-        if (payloadLength > 0 && await ReadExactAsync(stream, payload, ct) != payloadLength)
-            return null;
+        byte[] payload;
+        if (payloadLength == 0)
+        {
+            payload = [];
+        }
+        else
+        {
+            payload = ArrayPool<byte>.Shared.Rent(payloadLength);
+            if (await ReadExactAsync(stream, payload.AsMemory(0, payloadLength), ct) != payloadLength)
+            {
+                ArrayPool<byte>.Shared.Return(payload);
+                return null;
+            }
+        }
 
-        return (header[0], payload);
+        return (headerBuf[0], payload);
+    }
+
+    // Return a rented payload buffer back to the pool
+    public static void ReturnPayload(byte[] payload)
+    {
+        if (payload.Length > 0)
+            ArrayPool<byte>.Shared.Return(payload);
+    }
+
+    // Get the actual payload length from the header (since rented arrays may be larger)
+    public static int GetPayloadLength(byte[] headerBuf)
+    {
+        return BinaryPrimitives.ReadInt32BigEndian(headerBuf.AsSpan(1)) - 4;
     }
 
     public static async Task<(int version, Dictionary<string, string> parameters)?> ReadStartupMessageAsync(Stream stream, CancellationToken ct = default)
@@ -50,58 +74,53 @@ public static class PgMessageReader
         int offset = 4;
         while (offset < payload.Length)
         {
-            var key = ReadNullTerminatedString(payload, ref offset);
-            if (string.IsNullOrEmpty(key))
+            var key = ReadNullTerminatedString(payload.AsSpan(), ref offset);
+            if (key.Length == 0)
                 break;
-            var value = ReadNullTerminatedString(payload, ref offset);
+            var value = ReadNullTerminatedString(payload.AsSpan(), ref offset);
             parameters[key] = value;
         }
 
         return (version, parameters);
     }
 
-    public static string ReadPasswordFromPayload(byte[] payload)
+    public static string ReadPasswordFromPayload(ReadOnlySpan<byte> payload)
     {
         int offset = 0;
         return ReadNullTerminatedString(payload, ref offset);
     }
 
-    public static string ReadQueryFromPayload(byte[] payload)
+    public static string ReadQueryFromPayload(ReadOnlySpan<byte> payload, int payloadLength)
     {
         int offset = 0;
-        return ReadNullTerminatedString(payload, ref offset);
+        return ReadNullTerminatedString(payload[..payloadLength], ref offset);
     }
 
-    public static string ReadParseStatementFromPayload(byte[] payload)
+    public static string ReadParseStatementFromPayload(ReadOnlySpan<byte> payload, int payloadLength)
     {
         int offset = 0;
-        _ = ReadNullTerminatedString(payload, ref offset); // statement name
-        return ReadNullTerminatedString(payload, ref offset); // query
+        var span = payload[..payloadLength];
+        _ = ReadNullTerminatedString(span, ref offset); // statement name
+        return ReadNullTerminatedString(span, ref offset); // query
     }
 
-    public static string ReadCommandTagFromPayload(byte[] payload)
-    {
-        int offset = 0;
-        return ReadNullTerminatedString(payload, ref offset);
-    }
-
-    private static string ReadNullTerminatedString(byte[] data, ref int offset)
+    private static string ReadNullTerminatedString(ReadOnlySpan<byte> data, ref int offset)
     {
         int start = offset;
         while (offset < data.Length && data[offset] != 0)
             offset++;
-        var result = Encoding.UTF8.GetString(data, start, offset - start);
+        var result = Encoding.UTF8.GetString(data[start..offset]);
         if (offset < data.Length)
             offset++;
         return result;
     }
 
-    private static async Task<int> ReadExactAsync(Stream stream, byte[] buffer, CancellationToken ct)
+    private static async Task<int> ReadExactAsync(Stream stream, Memory<byte> buffer, CancellationToken ct)
     {
         int totalRead = 0;
         while (totalRead < buffer.Length)
         {
-            int read = await stream.ReadAsync(buffer.AsMemory(totalRead), ct);
+            int read = await stream.ReadAsync(buffer[totalRead..], ct);
             if (read == 0)
                 return totalRead;
             totalRead += read;
