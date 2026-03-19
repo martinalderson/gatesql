@@ -109,13 +109,14 @@ public class ProxyIntegrationTests : IAsyncLifetime
 
         await Task.Delay(2000);
 
-        var logFiles = Directory.GetFiles(_fixture.Config.Logging.Directory, "*.jsonl");
-        Assert.NotEmpty(logFiles);
+        using var http = new HttpClient();
+        http.DefaultRequestHeaders.Add("X-Api-Key", _fixture.ApiKey);
+        var response = await http.GetAsync($"http://127.0.0.1:{_fixture.ApiPort}/api/queries?count=50");
+        var body = await response.Content.ReadAsStringAsync();
 
-        var logContent = await File.ReadAllTextAsync(logFiles[0]);
-        Assert.Contains("SELECT 1", logContent);
-        Assert.Contains("SELECT 2", logContent);
-        Assert.Contains("logger-test-agent", logContent);
+        Assert.Contains("SELECT 1", body);
+        Assert.Contains("SELECT 2", body);
+        Assert.Contains("logger-test-agent", body);
     }
 
     [Fact]
@@ -132,10 +133,13 @@ public class ProxyIntegrationTests : IAsyncLifetime
 
         await Task.Delay(2000);
 
-        var logFiles = Directory.GetFiles(_fixture.Config.Logging.Directory, "*.jsonl");
-        var logContent = await File.ReadAllTextAsync(logFiles[0]);
-        Assert.Contains("purpose", logContent);
-        Assert.Contains("integration testing", logContent);
+        using var http = new HttpClient();
+        http.DefaultRequestHeaders.Add("X-Api-Key", _fixture.ApiKey);
+        var response = await http.GetAsync($"http://127.0.0.1:{_fixture.ApiPort}/api/queries?count=50");
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Contains("purpose", body);
+        Assert.Contains("integration testing", body);
     }
 
     [Fact]

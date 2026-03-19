@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using DbProxy.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace DbProxy.Query;
 
@@ -39,39 +41,51 @@ public record QueryLogEntry
 
 public class QueryLogger : IDisposable
 {
-    private readonly string _logDirectory;
     private readonly ConcurrentQueue<QueryLogEntry> _buffer = new();
+    private readonly ConcurrentBag<QueryLogEntry> _inMemoryLog = new();
+    private readonly IDbContextFactory<GateSqlDbContext>? _dbFactory;
     private readonly Timer _flushTimer;
-    private readonly ConcurrentBag<QueryLogEntry> _recentQueries = new();
-    private readonly object _writeLock = new();
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
-    public QueryLogger(string logDirectory)
+    public QueryLogger(IDbContextFactory<GateSqlDbContext>? dbFactory = null)
     {
-        _logDirectory = logDirectory;
-        Directory.CreateDirectory(logDirectory);
+        _dbFactory = dbFactory;
         _flushTimer = new Timer(_ => Flush(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
     }
 
     public void Log(QueryLogEntry entry)
     {
         _buffer.Enqueue(entry);
-        _recentQueries.Add(entry);
-
-        // Keep only last 1000 entries in memory for dashboard
-        if (_recentQueries.Count > 1500)
-            TrimRecentQueries();
     }
 
     public IReadOnlyList<QueryLogEntry> GetRecentQueries(int count = 100)
     {
-        return _recentQueries
-            .OrderByDescending(q => q.Timestamp)
-            .Take(count)
-            .ToList();
+        if (_dbFactory != null)
+        {
+            using var db = _dbFactory.CreateDbContext();
+            return db.QueryLogs
+                .OrderByDescending(q => q.Timestamp)
+                .Take(count)
+                .Select(q => new QueryLogEntry
+                {
+                    Timestamp = q.Timestamp,
+                    AgentId = q.AgentId,
+                    SessionId = q.SessionId,
+                    Task = q.Task,
+                    Query = q.Query,
+                    Context = q.Context != null ? JsonSerializer.Deserialize<Dictionary<string, string>>(q.Context) : null,
+                    RowCount = q.RowCount,
+                    DurationMs = q.DurationMs,
+                    Success = q.Success,
+                    Error = q.Error,
+                })
+                .ToList();
+        }
+
+        return _inMemoryLog.OrderByDescending(q => q.Timestamp).Take(count).ToList();
     }
 
     private void Flush()
@@ -80,33 +94,41 @@ public class QueryLogger : IDisposable
         while (_buffer.TryDequeue(out var entry))
             entries.Add(entry);
 
-        if (entries.Count == 0)
-            return;
+        if (entries.Count == 0) return;
 
-        var fileName = Path.Combine(_logDirectory, $"{DateTime.UtcNow:yyyy-MM-dd}.jsonl");
-
-        lock (_writeLock)
+        if (_dbFactory != null)
         {
-            using var writer = new StreamWriter(fileName, append: true);
-            foreach (var entry in entries)
+            try
             {
-                var json = JsonSerializer.Serialize(entry, JsonOptions);
-                writer.WriteLine(json);
+                using var db = _dbFactory.CreateDbContext();
+                foreach (var e in entries)
+                {
+                    db.QueryLogs.Add(new QueryLogEntity
+                    {
+                        Timestamp = e.Timestamp,
+                        AgentId = e.AgentId,
+                        SessionId = e.SessionId,
+                        Task = e.Task,
+                        Query = e.Query,
+                        Context = e.Context != null ? JsonSerializer.Serialize(e.Context, JsonOptions) : null,
+                        RowCount = e.RowCount,
+                        DurationMs = e.DurationMs,
+                        Success = e.Success,
+                        Error = e.Error,
+                    });
+                }
+                db.SaveChanges();
+            }
+            catch
+            {
+                // Don't crash the timer — entries are lost on failure
             }
         }
-    }
-
-    private void TrimRecentQueries()
-    {
-        var keep = _recentQueries
-            .OrderByDescending(q => q.Timestamp)
-            .Take(1000)
-            .ToList();
-
-        while (_recentQueries.TryTake(out _)) { }
-
-        foreach (var entry in keep)
-            _recentQueries.Add(entry);
+        else
+        {
+            foreach (var e in entries)
+                _inMemoryLog.Add(e);
+        }
     }
 
     public void Dispose()

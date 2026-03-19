@@ -64,7 +64,7 @@ public class ScramAuthTests : IAsyncLifetime
         var signingKeyManager = new SigningKeyManager(config.Auth.SigningKeyPath);
         _jwtAuth = new JwtAuthenticator(signingKeyManager);
         _sessionManager = new SessionManager(TimeSpan.FromMinutes(config.Auth.IdleTimeoutMinutes));
-        _queryLogger = new QueryLogger(config.Logging.Directory);
+        _queryLogger = new QueryLogger();
 
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseUrls($"http://127.0.0.1:{_apiPort}");

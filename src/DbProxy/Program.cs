@@ -2,8 +2,10 @@ using System.Text.Json;
 using DbProxy.Api;
 using DbProxy.Auth;
 using DbProxy.Configuration;
+using DbProxy.Data;
 using DbProxy.Protocol;
 using DbProxy.Query;
+using Microsoft.EntityFrameworkCore;
 
 // Load config
 var configPath = args.Length > 0 ? args[0] : "config.json";
@@ -39,16 +41,42 @@ if (Environment.GetEnvironmentVariable("GATESQL_UPSTREAM_DATABASE") is { } db)
 if (Environment.GetEnvironmentVariable("GATESQL_API_KEY") is { } apiKey)
     config.Auth.ParentApiKeys = [new ParentApiKey { Name = "env", Key = apiKey }];
 
+if (Environment.GetEnvironmentVariable("GATESQL_DB_CONNECTION") is { } dbConn)
+    config.Storage.ConnectionString = dbConn;
+
 // Initialize services
 var signingKeyManager = new SigningKeyManager(config.Auth.SigningKeyPath);
 var jwtAuth = new JwtAuthenticator(signingKeyManager);
-var sessionManager = new SessionManager(TimeSpan.FromMinutes(config.Auth.IdleTimeoutMinutes));
-var queryLogger = new QueryLogger(config.Logging.Directory);
 
 // Build web app for admin API + dashboard
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.UseUrls($"http://0.0.0.0:{config.Dashboard.Port}");
 builder.Logging.SetMinimumLevel(LogLevel.Information);
+
+// EF Core + SQLite
+builder.Services.AddDbContextFactory<GateSqlDbContext>(options =>
+    options.UseSqlite(config.Storage.ConnectionString));
+
+// Ensure DB directory exists for SQLite
+var dbPath = config.Storage.ConnectionString
+    .Split(';')
+    .Select(p => p.Trim())
+    .FirstOrDefault(p => p.StartsWith("Data Source=", StringComparison.OrdinalIgnoreCase))
+    ?["Data Source=".Length..];
+if (dbPath != null)
+{
+    var dir = Path.GetDirectoryName(dbPath);
+    if (!string.IsNullOrEmpty(dir))
+        Directory.CreateDirectory(dir);
+}
+
+var sp = builder.Services.BuildServiceProvider();
+var dbFactory = sp.GetRequiredService<IDbContextFactory<GateSqlDbContext>>();
+
+var sessionManager = new SessionManager(TimeSpan.FromMinutes(config.Auth.IdleTimeoutMinutes), dbFactory);
+await sessionManager.InitializeAsync();
+
+var queryLogger = new QueryLogger(dbFactory);
 
 // Register services for MVC DI
 builder.Services.AddSingleton(config);

@@ -25,5 +25,9 @@
   "dashboard": {
     "enabled": true,
     "port": 8080
+  },
+  "storage": {
+    "provider": "sqlite",
+    "connectionString": "Data Source=/app/data/gatesql.db"
   }
 }

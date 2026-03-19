@@ -7,6 +7,7 @@ public class ProxyConfig
     public AuthSettings Auth { get; set; } = new();
     public LoggingSettings Logging { get; set; } = new();
     public DashboardSettings Dashboard { get; set; } = new();
+    public StorageSettings Storage { get; set; } = new();
 }
 
 public class ProxySettings
@@ -50,4 +51,10 @@ public class DashboardSettings
 {
     public bool Enabled { get; set; } = true;
     public int Port { get; set; } = 8080;
+}
+
+public class StorageSettings
+{
+    public string Provider { get; set; } = "sqlite";
+    public string ConnectionString { get; set; } = "Data Source=data/gatesql.db";
 }

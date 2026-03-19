@@ -71,7 +71,7 @@ public class ProxyFixture : IAsyncLifetime
         var signingKeyManager = new SigningKeyManager(Config.Auth.SigningKeyPath);
         _jwtAuth = new JwtAuthenticator(signingKeyManager);
         _sessionManager = new SessionManager(TimeSpan.FromMinutes(Config.Auth.IdleTimeoutMinutes));
-        _queryLogger = new QueryLogger(Config.Logging.Directory);
+        _queryLogger = new QueryLogger();
 
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseUrls($"http://127.0.0.1:{ApiPort}");

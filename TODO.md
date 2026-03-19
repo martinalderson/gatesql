@@ -2,9 +2,9 @@
 
 ## v1 Polish
 - [ ] Dashboard auth (currently open to anyone who can reach port 8080)
-- [ ] Use absolute paths for signing key + logs in config (currently relative to working directory)
 - [ ] AJAX refresh on dashboard instead of full page reload
-- [ ] Connection pooling for upstream PG (currently 1:1 agent→upstream connection)
+- [ ] Upstream SSL/TLS (sslmode=require/verify-ca/verify-full)
+- [ ] Publish Docker image to GHCR
 
 ## v2 — Permission Upgrades (Human-in-the-Loop)
 - [ ] Agent hits permission boundary → proxy returns structured error with upgrade request
