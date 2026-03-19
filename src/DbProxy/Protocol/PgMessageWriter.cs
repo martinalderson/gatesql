@@ -150,6 +150,29 @@ public static class PgMessageWriter
         return buffer;
     }
 
+    public static byte[] BuildSaslInitialResponseMessage(string mechanism, byte[] clientFirstMessage)
+    {
+        var mechBytes = Encoding.UTF8.GetBytes(mechanism + "\0");
+        // 'p' + int32 length + mechanism\0 + int32 response-length + response
+        var totalPayload = mechBytes.Length + 4 + clientFirstMessage.Length;
+        var buffer = new byte[1 + 4 + totalPayload];
+        buffer[0] = PgMessageTypes.ClientPassword;
+        BinaryPrimitives.WriteInt32BigEndian(buffer.AsSpan(1), totalPayload + 4);
+        mechBytes.CopyTo(buffer, 5);
+        BinaryPrimitives.WriteInt32BigEndian(buffer.AsSpan(5 + mechBytes.Length), clientFirstMessage.Length);
+        clientFirstMessage.CopyTo(buffer, 5 + mechBytes.Length + 4);
+        return buffer;
+    }
+
+    public static byte[] BuildSaslResponseMessage(byte[] clientFinalMessage)
+    {
+        var buffer = new byte[1 + 4 + clientFinalMessage.Length];
+        buffer[0] = PgMessageTypes.ClientPassword;
+        BinaryPrimitives.WriteInt32BigEndian(buffer.AsSpan(1), clientFinalMessage.Length + 4);
+        clientFinalMessage.CopyTo(buffer, 5);
+        return buffer;
+    }
+
     private static void WriteParam(MemoryStream ms, string key, string value)
     {
         ms.Write(Encoding.UTF8.GetBytes(key + "\0"));

@@ -1,21 +1,24 @@
 using System.Net.Http.Json;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using DbProxy.Auth;
 using DbProxy.Configuration;
 using DbProxy.Protocol;
 using DbProxy.Query;
 using Microsoft.Extensions.Logging;
+using Testcontainers.PostgreSql;
 
 namespace DbProxy.Tests.Integration;
 
 public class ProxyFixture : IAsyncLifetime
 {
+    private readonly string _pgImage;
+
     public ProxyConfig Config { get; private set; } = null!;
     public int ProxyPort { get; private set; }
     public int ApiPort { get; private set; }
     public string ApiKey => "test_key_123";
 
+    private PostgreSqlContainer _pg = null!;
     private PgProtocolHandler _pgHandler = null!;
     private WebApplication _webApp = null!;
     private JwtAuthenticator _jwtAuth = null!;
@@ -24,29 +27,35 @@ public class ProxyFixture : IAsyncLifetime
     private CancellationTokenSource _cts = null!;
     private string _tempDir = null!;
 
+    public ProxyFixture(string pgImage = "postgres:17")
+    {
+        _pgImage = pgImage;
+    }
+
     public async Task InitializeAsync()
     {
+        _pg = new PostgreSqlBuilder(_pgImage)
+            .WithUsername("testuser")
+            .WithPassword("testpass")
+            .Build();
+        await _pg.StartAsync();
+
         _tempDir = Path.Combine(Path.GetTempPath(), $"dbproxy-test-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_tempDir);
 
-        // Find free ports
         ProxyPort = GetFreePort();
         ApiPort = GetFreePort();
 
         Config = new ProxyConfig
         {
-            Proxy = new ProxySettings
-            {
-                ListenPort = ProxyPort,
-                ListenHost = "127.0.0.1",
-            },
+            Proxy = new ProxySettings { ListenPort = ProxyPort, ListenHost = "127.0.0.1" },
             Upstream = new UpstreamSettings
             {
-                Host = "127.0.0.1",
-                Port = 5432,
+                Host = _pg.Hostname,
+                Port = _pg.GetMappedPublicPort(5432),
                 Database = "postgres",
-                Username = "postgres",
-                Password = "postgres",
+                Username = "testuser",
+                Password = "testpass",
             },
             Auth = new AuthSettings
             {
@@ -55,15 +64,8 @@ public class ProxyFixture : IAsyncLifetime
                 SigningKeyPath = Path.Combine(_tempDir, "signing.key"),
                 ParentApiKeys = [new ParentApiKey { Name = "test", Key = ApiKey }],
             },
-            Logging = new LoggingSettings
-            {
-                Directory = Path.Combine(_tempDir, "logs"),
-            },
-            Dashboard = new DashboardSettings
-            {
-                Enabled = false,
-                Port = ApiPort,
-            },
+            Logging = new LoggingSettings { Directory = Path.Combine(_tempDir, "logs") },
+            Dashboard = new DashboardSettings { Enabled = false, Port = ApiPort },
         };
 
         var signingKeyManager = new SigningKeyManager(Config.Auth.SigningKeyPath);
@@ -87,7 +89,6 @@ public class ProxyFixture : IAsyncLifetime
         _ = Task.Run(() => _pgHandler.StartAsync(_cts.Token));
         _ = Task.Run(() => _webApp.RunAsync(_cts.Token));
 
-        // Wait for proxy to be ready
         await Task.Delay(500);
     }
 
@@ -121,6 +122,7 @@ public class ProxyFixture : IAsyncLifetime
         _sessionManager.Dispose();
         _queryLogger.Dispose();
         await _webApp.DisposeAsync();
+        await _pg.DisposeAsync();
 
         try { Directory.Delete(_tempDir, true); } catch { }
     }

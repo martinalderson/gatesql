@@ -438,6 +438,17 @@ public class PgProtocolHandler : IDisposable
                     {
                         // Continue reading until ReadyForQuery
                     }
+                    else if (authType == PgMessageTypes.AuthSasl)
+                    {
+                        var mechList = payload.AsSpan(4, pLen - 4).ToArray();
+                        PgMessageReader.ReturnPayload(payload);
+                        await ScramSha256Authenticator.AuthenticateAsync(
+                            stream, _config.Upstream.Username, _config.Upstream.Password,
+                            mechList, ct);
+                        // Authenticator handles through AuthSaslFinal;
+                        // loop continues to read AuthOk + ReadyForQuery
+                        continue;
+                    }
                     else
                     {
                         _logger.LogError("Unsupported upstream auth type: {AuthType}", authType);

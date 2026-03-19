@@ -12,12 +12,12 @@ dotnet run --project src/DbProxy -- /home/martin/source/db-proxy/config.json
 ## Test
 
 ```bash
-dotnet test                    # 13 integration tests (requires local PostgreSQL on port 5432)
+dotnet test                    # 19 integration tests (uses Testcontainers — requires Docker)
 ./scripts/restart-proxy.sh    # restart proxy (kills existing, starts fresh)
 ./scripts/benchmark.sh        # pgbench comparison: proxy vs direct
 ```
 
-Tests require PostgreSQL running locally with user `postgres`, password `postgres`, md5 auth on 127.0.0.1.
+Tests use Testcontainers to spin up PostgreSQL in Docker. No local PG install needed. Version matrix tests run against PG 14–17.
 
 ## Architecture
 
@@ -33,7 +33,7 @@ Browser ──HTTP──► MVC Dashboard (port 8080)
 - **Auth model**: Parent-delegated JWTs. The entity spawning the agent calls `POST /api/sessions` to get a short-lived JWT. Agent uses it as `PGPASSWORD`. Agent never holds long-lived credentials.
 - **Session expiry**: JWT `exp` = hard cap (default 8h). Proxy-side idle timeout with sliding window (default 15min). Both enforced.
 - **Purpose enforcement**: All queries must include `/* <agent_purpose>reason</agent_purpose> */`. Queries without it are rejected with an error message. Internal driver queries (pg_catalog, SET, BEGIN, etc.) are exempt.
-- **Upstream auth**: Proxy handles MD5 password auth with upstream PG. SCRAM-SHA-256 is NOT supported — use md5 in pg_hba.conf.
+- **Upstream auth**: Proxy handles MD5 and SCRAM-SHA-256 password auth with upstream PG.
 
 ### Performance
 - Message relay uses `ArrayPool<byte>` — zero allocations in the hot path

@@ -47,6 +47,8 @@ public static class PgMessageTypes
     public const int AuthCleartextPassword = 3;
     public const int AuthMd5Password = 5;
     public const int AuthSasl = 10;
+    public const int AuthSaslContinue = 11;
+    public const int AuthSaslFinal = 12;
 
     // Transaction status
     public const byte TransactionIdle = (byte)'I';
