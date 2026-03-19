@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>db-proxy — Secure PostgreSQL access for AI agents</title>
+  <title>GateSQL — Secure PostgreSQL access for AI agents</title>
   <meta name="description" content="Give AI agents scoped, auditable, time-limited PostgreSQL access with short-lived JWTs. No shared credentials, ever.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,11 +15,11 @@
 <!-- Header -->
 <header>
   <nav>
-    <a href="/" class="logo">db<span>-proxy</span></a>
+    <a href="/" class="logo">gate<span>sql</span></a>
     <div class="nav-links">
       <a href="#features">Features</a>
       <a href="#quickstart">Quick Start</a>
-      <a href="https://github.com/martin/db-proxy" target="_blank" rel="noopener noreferrer" class="gh-link">
+      <a href="https://github.com/martinalderson/gatesql" target="_blank" rel="noopener noreferrer" class="gh-link">
         <svg viewBox="0 0 24 24"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
       </a>
     </div>
@@ -28,13 +28,13 @@
 
 <!-- Hero -->
 <section class="hero">
-  <div class="hero-title">db-proxy</div>
+  <div class="hero-title">GateSQL</div>
   <div><span class="hero-badge">Docker &middot; PostgreSQL Wire Protocol</span></div>
   <h1>Secure database access for AI agents.<br><span class="muted">No shared credentials, ever.</span></h1>
   <p class="desc">A PostgreSQL wire-protocol proxy that gives untrusted AI agents scoped, auditable, time-limited database access using short-lived JWTs.</p>
   <div class="hero-actions">
     <a href="#quickstart" class="btn btn-primary">Get Started</a>
-    <a href="https://github.com/martin/db-proxy" class="btn btn-secondary" target="_blank">GitHub</a>
+    <a href="https://github.com/martinalderson/gatesql" class="btn btn-secondary" target="_blank">GitHub</a>
     <a href="#features" class="btn btn-ghost">Learn More</a>
   </div>
 </section>
@@ -43,7 +43,7 @@
 <section class="install">
   <button class="install-cmd" onclick="copyInstall(this)">
     <span class="dollar">$</span>
-    <span class="cmd">docker run -p 15432:15432 -p 8080:8080 dbproxy/dbproxy</span>
+    <span class="cmd">docker run -p 15432:15432 -p 8080:8080 gatesql/gatesql</span>
     <svg class="copy-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
   </button>
   <div class="install-sub">
@@ -65,11 +65,11 @@
         <span class="dot-yellow"></span>
         <span class="dot-green"></span>
       </div>
-      <span class="terminal-title">db-proxy</span>
+      <span class="terminal-title">gatesql</span>
     </div>
     <div class="terminal-body" id="term"></div>
     <div class="terminal-status">
-      <span class="left">db-proxy</span>
+      <span class="left">gatesql</span>
       <span class="right">:15432 &rarr; :5432</span>
     </div>
   </div>
@@ -87,7 +87,7 @@
     </div>
     <div class="arch-arrow">&mdash; PG wire &rarr;</div>
     <div class="arch-box" style="border-color: var(--accent);">
-      <div class="label" style="color: var(--accent);">db-proxy</div>
+      <div class="label" style="color: var(--accent);">GateSQL</div>
       <div class="sublabel">JWT auth + policy</div>
     </div>
     <div class="arch-arrow">&mdash; PG wire &rarr;</div>
@@ -169,12 +169,17 @@
   <div class="quickstart-card">
     <div class="card-header"><span>Quick start</span></div>
     <div class="card-body">
-      <p><span class="prompt">$ </span>docker run -p 15432:15432 -p 8080:8080 dbproxy/dbproxy</p>
+      <p class="comment"># Point at your PostgreSQL, set an API key</p>
+      <p><span class="prompt">$ </span>docker run -p 15432:15432 -p 8080:8080 \</p>
+      <p>&nbsp;&nbsp;-e GATESQL_UPSTREAM_HOST=my-pg.example.com \</p>
+      <p>&nbsp;&nbsp;-e GATESQL_UPSTREAM_PASSWORD=secret \</p>
+      <p>&nbsp;&nbsp;-e GATESQL_API_KEY=pk_prod_abc123 \</p>
+      <p>&nbsp;&nbsp;gatesql/gatesql</p>
       <p class="comment">&rarr; Proxy listening on :15432, dashboard on :8080</p>
       <br>
       <p class="comment"># Create a session for your agent</p>
       <p><span class="prompt">$ </span>curl -X POST http://localhost:8080/api/sessions \</p>
-      <p>&nbsp;&nbsp;-H "X-Api-Key: pk_dev_123" \</p>
+      <p>&nbsp;&nbsp;-H "X-Api-Key: pk_prod_abc123" \</p>
       <p>&nbsp;&nbsp;-d '{"agentId":"my-agent","task":"inventory-check"}'</p>
       <p class="comment">&rarr; {"token":"eyJhbG...","sessionId":"..."}</p>
       <br>
@@ -187,17 +192,17 @@
 <!-- Footer -->
 <footer>
   <div class="inner">
-    <span>db-proxy by <a href="https://martinalderson.com" target="_blank" rel="noopener noreferrer" style="color:var(--fg);transition:opacity 0.15s;">Martin Alderson</a></span>
+    <span>GateSQL by <a href="https://martinalderson.com" target="_blank" rel="noopener noreferrer" style="color:var(--fg);transition:opacity 0.15s;">Martin Alderson</a></span>
     <div class="links">
       <a href="#quickstart">Docs</a>
-      <a href="https://github.com/martin/db-proxy" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://github.com/martinalderson/gatesql" target="_blank" rel="noopener noreferrer">GitHub</a>
     </div>
   </div>
 </footer>
 
 <script>
 function copyInstall(el) {
-  navigator.clipboard.writeText('docker run -p 15432:15432 -p 8080:8080 dbproxy/dbproxy');
+  navigator.clipboard.writeText('docker run -p 15432:15432 -p 8080:8080 gatesql/gatesql');
   const cmd = el.querySelector('.cmd');
   const orig = cmd.textContent;
   cmd.textContent = 'Copied!';

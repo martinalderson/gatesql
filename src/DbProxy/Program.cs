@@ -25,6 +25,20 @@ else
     Console.WriteLine($"Created default config at {configPath}");
 }
 
+// Apply environment variable overrides
+if (Environment.GetEnvironmentVariable("GATESQL_UPSTREAM_HOST") is { } host)
+    config.Upstream.Host = host;
+if (Environment.GetEnvironmentVariable("GATESQL_UPSTREAM_PORT") is { } port && int.TryParse(port, out var p))
+    config.Upstream.Port = p;
+if (Environment.GetEnvironmentVariable("GATESQL_UPSTREAM_USER") is { } user)
+    config.Upstream.Username = user;
+if (Environment.GetEnvironmentVariable("GATESQL_UPSTREAM_PASSWORD") is { } pass)
+    config.Upstream.Password = pass;
+if (Environment.GetEnvironmentVariable("GATESQL_UPSTREAM_DATABASE") is { } db)
+    config.Upstream.Database = db;
+if (Environment.GetEnvironmentVariable("GATESQL_API_KEY") is { } apiKey)
+    config.Auth.ParentApiKeys = [new ParentApiKey { Name = "env", Key = apiKey }];
+
 // Initialize services
 var signingKeyManager = new SigningKeyManager(config.Auth.SigningKeyPath);
 var jwtAuth = new JwtAuthenticator(signingKeyManager);

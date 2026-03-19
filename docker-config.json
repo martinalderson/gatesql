@@ -1,0 +1,29 @@
+{
+  "proxy": {
+    "listenPort": 15432,
+    "listenHost": "0.0.0.0"
+  },
+  "upstream": {
+    "host": "host.docker.internal",
+    "port": 5432,
+    "database": "postgres",
+    "username": "postgres",
+    "password": "postgres",
+    "maxConnections": 20
+  },
+  "auth": {
+    "hardCapMinutes": 480,
+    "idleTimeoutMinutes": 15,
+    "signingKeyPath": "/app/keys/signing.key",
+    "parentApiKeys": [
+      { "name": "default", "key": "CHANGE_ME" }
+    ]
+  },
+  "logging": {
+    "directory": "/app/logs"
+  },
+  "dashboard": {
+    "enabled": true,
+    "port": 8080
+  }
+}
