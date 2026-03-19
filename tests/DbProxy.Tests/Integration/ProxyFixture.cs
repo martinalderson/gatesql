@@ -48,7 +48,7 @@ public class ProxyFixture : IAsyncLifetime
 
         Config = new ProxyConfig
         {
-            Proxy = new ProxySettings { ListenPort = ProxyPort, ListenHost = "127.0.0.1" },
+            Proxy = new ProxySettings { ListenPort = ProxyPort, ListenHost = "0.0.0.0" },
             Upstream = new UpstreamSettings
             {
                 Host = _pg.Hostname,
