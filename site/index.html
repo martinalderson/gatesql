@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>db-proxy — Secure PostgreSQL access for AI agents</title>
+  <meta name="description" content="Give AI agents scoped, auditable, time-limited PostgreSQL access with short-lived JWTs. No shared credentials, ever.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Header -->
+<header>
+  <nav>
+    <a href="/" class="logo">db<span>-proxy</span></a>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#quickstart">Quick Start</a>
+      <a href="https://github.com/martin/db-proxy" target="_blank" rel="noopener noreferrer" class="gh-link">
+        <svg viewBox="0 0 24 24"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+      </a>
+    </div>
+  </nav>
+</header>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="hero-title">db-proxy</div>
+  <div><span class="hero-badge">Docker &middot; PostgreSQL Wire Protocol</span></div>
+  <h1>Secure database access for AI agents.<br><span class="muted">No shared credentials, ever.</span></h1>
+  <p class="desc">A PostgreSQL wire-protocol proxy that gives untrusted AI agents scoped, auditable, time-limited database access using short-lived JWTs.</p>
+  <div class="hero-actions">
+    <a href="#quickstart" class="btn btn-primary">Get Started</a>
+    <a href="https://github.com/martin/db-proxy" class="btn btn-secondary" target="_blank">GitHub</a>
+    <a href="#features" class="btn btn-ghost">Learn More</a>
+  </div>
+</section>
+
+<!-- Install -->
+<section class="install">
+  <button class="install-cmd" onclick="copyInstall(this)">
+    <span class="dollar">$</span>
+    <span class="cmd">docker run -p 15432:15432 -p 8080:8080 dbproxy/dbproxy</span>
+    <svg class="copy-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+  </button>
+  <div class="install-sub">
+    Requires PostgreSQL with <code>md5</code> auth on the upstream
+  </div>
+</section>
+
+<!-- Terminal Demo -->
+<section class="demo-section">
+  <div class="section-header">
+    <h2>Parent creates session, agent connects</h2>
+    <p class="section-desc">The entity spawning the agent gets a short-lived JWT. The agent uses it as a standard PostgreSQL password.</p>
+  </div>
+
+  <div class="terminal">
+    <div class="terminal-bar">
+      <div class="terminal-dots">
+        <span class="dot-red"></span>
+        <span class="dot-yellow"></span>
+        <span class="dot-green"></span>
+      </div>
+      <span class="terminal-title">db-proxy</span>
+    </div>
+    <div class="terminal-body" id="term"></div>
+    <div class="terminal-status">
+      <span class="left">db-proxy</span>
+      <span class="right">:15432 &rarr; :5432</span>
+    </div>
+  </div>
+</section>
+
+<!-- Architecture -->
+<section class="arch-section">
+  <h2>How it works</h2>
+  <p class="section-desc">Native PostgreSQL wire protocol from end to end. No ORMs, no middleware.</p>
+
+  <div class="arch-diagram">
+    <div class="arch-box">
+      <div class="label">AI Agent</div>
+      <div class="sublabel">psql / Npgsql / any PG client</div>
+    </div>
+    <div class="arch-arrow">&mdash; PG wire &rarr;</div>
+    <div class="arch-box" style="border-color: var(--accent);">
+      <div class="label" style="color: var(--accent);">db-proxy</div>
+      <div class="sublabel">JWT auth + policy</div>
+    </div>
+    <div class="arch-arrow">&mdash; PG wire &rarr;</div>
+    <div class="arch-box">
+      <div class="label">PostgreSQL</div>
+      <div class="sublabel">real credentials stay here</div>
+    </div>
+  </div>
+</section>
+
+<!-- Purpose Enforcement Callout -->
+<section class="purpose-section">
+  <div class="purpose-card">
+    <div class="purpose-header">
+      <h2>Every query needs a reason</h2>
+      <p>Agents must declare <em>why</em> they're running each query. No purpose, no results. Full stop.</p>
+    </div>
+    <div class="purpose-demo">
+      <div class="purpose-example good">
+        <div class="purpose-label good-label">Allowed</div>
+        <pre><code><span class="comment">/* &lt;agent_purpose&gt;check low-stock items for reorder alert&lt;/agent_purpose&gt; */</span>
+<span class="kw">SELECT</span> product, qty <span class="kw">FROM</span> inventory <span class="kw">WHERE</span> qty &lt; 10;</code></pre>
+      </div>
+      <div class="purpose-example bad">
+        <div class="purpose-label bad-label">Rejected</div>
+        <pre><code><span class="kw">SELECT</span> * <span class="kw">FROM</span> users;
+<span class="err-text">ERROR: query rejected — missing purpose comment</span></code></pre>
+      </div>
+    </div>
+    <p class="purpose-footer">Every purpose is logged with the query, agent ID, and session. You get a full audit trail of not just <em>what</em> an agent did, but <em>why</em> it said it needed to.</p>
+  </div>
+</section>
+
+<!-- Features -->
+<section class="features" id="features">
+  <h2>Built for agent workloads</h2>
+  <div class="features-grid">
+    <div class="feature">
+      <h3>Short-lived JWTs</h3>
+      <p>Parent creates a session, gets a JWT with hard expiry. Agent never sees real database credentials.</p>
+    </div>
+    <div class="feature">
+      <h3>Purpose enforcement</h3>
+      <p>Every query must include a purpose comment. Queries without one are rejected. Internal driver queries are exempt.</p>
+    </div>
+    <div class="feature">
+      <h3>Query budgets</h3>
+      <p>Set a max query count per session. When the budget is exhausted, the connection is closed.</p>
+    </div>
+    <div class="feature">
+      <h3>Idle timeout</h3>
+      <p>Sliding-window idle timeout with configurable duration. Plus a hard cap on total session lifetime.</p>
+    </div>
+    <div class="feature">
+      <h3>Full audit log</h3>
+      <p>JSON-lines query logs with agent ID, session ID, purpose, query text, and timing. Every query attributed.</p>
+    </div>
+    <div class="feature">
+      <h3>Zero-alloc relay</h3>
+      <p>ArrayPool + Span in the hot path. Flush at sync points only. ~986 TPS through the proxy at 2.8x overhead.</p>
+    </div>
+    <div class="feature">
+      <h3>Admin API</h3>
+      <p>Create, list, and revoke sessions over HTTP. API-key authenticated. Build it into your agent orchestration.</p>
+    </div>
+    <div class="feature">
+      <h3>Live dashboard</h3>
+      <p>MVC dashboard shows active sessions, query counts, and connection status at a glance.</p>
+    </div>
+    <div class="feature">
+      <h3>Standard clients</h3>
+      <p>Agents connect with psql, Npgsql, asyncpg, or any PostgreSQL client. No custom SDK required.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Quick Start -->
+<section class="quickstart" id="quickstart">
+  <div class="quickstart-card">
+    <div class="card-header"><span>Quick start</span></div>
+    <div class="card-body">
+      <p><span class="prompt">$ </span>docker run -p 15432:15432 -p 8080:8080 dbproxy/dbproxy</p>
+      <p class="comment">&rarr; Proxy listening on :15432, dashboard on :8080</p>
+      <br>
+      <p class="comment"># Create a session for your agent</p>
+      <p><span class="prompt">$ </span>curl -X POST http://localhost:8080/api/sessions \</p>
+      <p>&nbsp;&nbsp;-H "X-Api-Key: pk_dev_123" \</p>
+      <p>&nbsp;&nbsp;-d '{"agentId":"my-agent","task":"inventory-check"}'</p>
+      <p class="comment">&rarr; {"token":"eyJhbG...","sessionId":"..."}</p>
+      <br>
+      <p class="comment"># Agent connects with the JWT as password</p>
+      <p><span class="prompt">$ </span>PGPASSWORD="eyJhbG..." psql -h 127.0.0.1 -p 15432 -U agent -d postgres</p>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <div class="inner">
+    <span>db-proxy by <a href="https://martinalderson.com" target="_blank" rel="noopener noreferrer" style="color:var(--fg);transition:opacity 0.15s;">Martin Alderson</a></span>
+    <div class="links">
+      <a href="#quickstart">Docs</a>
+      <a href="https://github.com/martin/db-proxy" target="_blank" rel="noopener noreferrer">GitHub</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+function copyInstall(el) {
+  navigator.clipboard.writeText('docker run -p 15432:15432 -p 8080:8080 dbproxy/dbproxy');
+  const cmd = el.querySelector('.cmd');
+  const orig = cmd.textContent;
+  cmd.textContent = 'Copied!';
+  setTimeout(() => cmd.textContent = orig, 1500);
+}
+
+// Terminal typing animation
+const lines = [
+  { type: 'prompt', text: '$ curl -X POST http://localhost:8080/api/sessions \\' },
+  { type: 'cmd',    text: '    -H "X-Api-Key: pk_dev_123" \\' },
+  { type: 'cmd',    text: '    -d \'{"agentId":"agent-7","task":"audit","queryBudget":50}\'' },
+  { type: 'gap' },
+  { type: 'output', text: '{"sessionId":"a1b2c3","token":"eyJhbGciOi..."}' },
+  { type: 'pause' },
+  { type: 'gap' },
+  { type: 'prompt', text: '$ PGPASSWORD="eyJhbGciOi..." psql -h 127.0.0.1 -p 15432 -U agent' },
+  { type: 'gap' },
+  { type: 'highlight', text: 'SSL connection (protocol: TLSv1.3)' },
+  { type: 'output', text: 'Type "help" for help.' },
+  { type: 'pause' },
+  { type: 'gap' },
+  { type: 'prompt', text: 'agent=> /* <agent_purpose>check inventory levels</agent_purpose> */' },
+  { type: 'cmd',    text: '        SELECT product, qty FROM inventory WHERE qty < 10;' },
+  { type: 'gap' },
+  { type: 'output', text: ' product      | qty' },
+  { type: 'output', text: '--------------+-----' },
+  { type: 'output', text: ' widget-alpha |   3' },
+  { type: 'output', text: ' bolt-9mm     |   7' },
+  { type: 'output', text: '(2 rows)' },
+  { type: 'pause' },
+  { type: 'gap' },
+  { type: 'prompt', text: 'agent=> SELECT * FROM users;' },
+  { type: 'err',    text: 'ERROR: query rejected — missing purpose comment' },
+  { type: 'warn',   text: 'HINT: wrap query in /* <agent_purpose>reason</agent_purpose> */' },
+];
+
+const term = document.getElementById('term');
+let lineIdx = 0;
+
+function renderLine(l) {
+  const div = document.createElement('div');
+  div.className = 'line';
+  if (l.type === 'pause') { return null; }
+  if (l.type === 'gap') { div.className += ' gap'; div.innerHTML = '&nbsp;'; }
+  else if (l.type === 'prompt') { div.innerHTML = `<span class="prompt">${l.text.substring(0,2)}</span><span class="cmd-text">${esc(l.text.substring(2))}</span>`; }
+  else if (l.type === 'cmd') { div.innerHTML = `<span class="cmd-text">${esc(l.text)}</span>`; }
+  else if (l.type === 'output') { div.innerHTML = `<span class="output">${esc(l.text)}</span>`; }
+  else if (l.type === 'highlight') { div.innerHTML = `<span class="highlight">${esc(l.text)}</span>`; }
+  else if (l.type === 'warn') { div.innerHTML = `<span class="warn">${esc(l.text)}</span>`; }
+  else if (l.type === 'err') { div.innerHTML = `<span class="err">${esc(l.text)}</span>`; }
+  return div;
+}
+
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function typeNext() {
+  if (lineIdx >= lines.length) {
+    setTimeout(() => { term.innerHTML = ''; lineIdx = 0; typeNext(); }, 4000);
+    return;
+  }
+  const l = lines[lineIdx++];
+  const el = renderLine(l);
+  if (el) {
+    term.appendChild(el);
+    while (term.scrollHeight > term.clientHeight && term.children.length > 1) {
+      term.removeChild(term.firstChild);
+    }
+  }
+  const delay = l.type === 'pause' ? 1500 : l.type === 'gap' ? 300 : l.type === 'prompt' ? 600 : l.type === 'err' ? 800 : l.type === 'output' ? 80 : 120;
+  setTimeout(typeNext, delay);
+}
+
+// Start animation when terminal is visible
+const observer = new IntersectionObserver((entries) => {
+  if (entries[0].isIntersecting) { observer.disconnect(); typeNext(); }
+}, { threshold: 0.3 });
+observer.observe(term);
+</script>
+
+</body>
+</html>
