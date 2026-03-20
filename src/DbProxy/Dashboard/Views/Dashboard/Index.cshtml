@@ -3,24 +3,17 @@
     Layout = "_Layout";
 }
 
-<div class="container">
-    <div class="stats">
-        <div class="stat-card">
-            <div class="label">Active Sessions</div>
-            <div class="value">@Model.ActiveSessions.Count</div>
-        </div>
-        <div class="stat-card">
-            <div class="label">Connected Now</div>
-            <div class="value">@Model.ConnectedNow</div>
-        </div>
-        <div class="stat-card">
-            <div class="label">Total Queries</div>
-            <div class="value">@Model.TotalQueries</div>
-        </div>
-        <div class="stat-card">
-            <div class="label">Total Sessions</div>
-            <div class="value">@Model.TotalSessions</div>
-        </div>
+<div class="header">
+    <div class="dot"></div>
+    <h1>GateSQL</h1>
+    <form method="post" action="/dashboard/logout" style="margin:0;">
+        <button type="submit" class="logout">Logout</button>
+    </form>
+</div>
+
+<div class="container" hx-ext="sse" sse-connect="/dashboard/events">
+    <div class="stats" sse-swap="stats" hx-swap="innerHTML">
+        @await Html.PartialAsync("_Stats", Model)
     </div>
 
     <div class="section">
@@ -39,69 +32,8 @@
                     <th></th>
                 </tr>
             </thead>
-            <tbody>
-                @if (Model.ActiveSessions.Count == 0)
-                {
-                    <tr><td colspan="9" class="empty">No active sessions</td></tr>
-                }
-                @foreach (var s in Model.ActiveSessions)
-                {
-                    var timeLeft = s.ExpiresAt - DateTime.UtcNow;
-                    var idle = DateTime.UtcNow - s.LastActivityAt;
-                    <tr>
-                        <td><strong>@s.AgentId</strong></td>
-                        <td>@s.Task</td>
-                        <td><span class="badge @s.StatusCss">@s.Status</span></td>
-                        <td>@s.BudgetDisplay</td>
-                        <td>
-                            @if (timeLeft.TotalMinutes > 60)
-                            {
-                                @($"{(int)timeLeft.TotalHours}h {timeLeft.Minutes}m left")
-                            }
-                            else if (timeLeft.TotalMinutes > 0)
-                            {
-                                @($"{(int)timeLeft.TotalMinutes}m left")
-                            }
-                            else
-                            {
-                                <span style="color: #f87171;">expired</span>
-                            }
-                        </td>
-                        @{
-                            var idleRemaining = TimeSpan.FromMinutes(Model.IdleTimeoutMinutes) - idle;
-                        }
-                        <td>
-                            @if (idleRemaining.TotalSeconds <= 0)
-                            {
-                                <span style="color: #f87171;">timed out</span>
-                            }
-                            else if (idleRemaining.TotalMinutes < 2)
-                            {
-                                <span style="color: #fbbf24;">@($"{(int)idleRemaining.TotalSeconds}s")</span>
-                            }
-                            else
-                            {
-                                @($"{(int)idleRemaining.TotalMinutes}m / {Model.IdleTimeoutMinutes}m")
-                            }
-                            <span style="font-size: 10px; color: #525252; margin-left: 4px;">(idle @s.TimeAgo(s.LastActivityAt))</span>
-                        </td>
-                        <td>@s.TimeAgo(s.CreatedAt)</td>
-                        <td style="font-family: monospace; font-size: 11px; color: #525252;">@s.SessionId[..18]...</td>
-                        <td>
-                            @if (!s.IsRevoked)
-                            {
-                                <form method="post" asp-action="Revoke" asp-controller="Dashboard" style="display:inline;">
-                                    <input type="hidden" name="sessionId" value="@s.SessionId" />
-                                    <button type="submit" style="background: #2a0a0a; color: #f87171; border: 1px solid #3a1a1a; padding: 3px 10px; border-radius: 4px; font-size: 11px; cursor: pointer;">Revoke</button>
-                                </form>
-                            }
-                            else
-                            {
-                                <span class="badge badge-red">Revoked</span>
-                            }
-                        </td>
-                    </tr>
-                }
+            <tbody sse-swap="sessions" hx-swap="innerHTML">
+                @await Html.PartialAsync("_SessionsTable", Model)
             </tbody>
         </table>
     </div>
@@ -120,46 +52,12 @@
                     <th>Status</th>
                 </tr>
             </thead>
-            <tbody>
-                @if (Model.RecentQueries.Count == 0)
-                {
-                    <tr><td colspan="7" class="empty">No queries yet</td></tr>
-                }
+            <tbody id="queries" sse-swap="query" hx-swap="afterbegin">
                 @foreach (var q in Model.RecentQueries)
                 {
-                    var ago = DateTime.UtcNow - q.Timestamp;
-                    var agoStr = ago.TotalSeconds < 60 ? $"{(int)ago.TotalSeconds}s ago"
-                        : ago.TotalMinutes < 60 ? $"{(int)ago.TotalMinutes}m ago"
-                        : $"{(int)ago.TotalHours}h ago";
-                    <tr>
-                        <td>@agoStr</td>
-                        <td>@q.AgentId</td>
-                        <td class="query-text" title="@q.Query">@q.Query</td>
-                        <td style="font-size: 11px; color: #737373;">
-                            @if (q.Context != null)
-                            {
-                                @string.Join(", ", q.Context.Select(kv => $"{kv.Key}={kv.Value}"))
-                            }
-                        </td>
-                        <td>@(q.RowCount?.ToString() ?? "-")</td>
-                        <td>@(q.DurationMs)ms</td>
-                        <td>
-                            @if (q.Success)
-                            {
-                                <span class="badge badge-green">OK</span>
-                            }
-                            else
-                            {
-                                <span class="badge badge-red">Error</span>
-                            }
-                        </td>
-                    </tr>
+                    @await Html.PartialAsync("_QueryRow", q)
                 }
             </tbody>
         </table>
     </div>
 </div>
-
-<script>
-    setTimeout(() => location.reload(), 3000);
-</script>

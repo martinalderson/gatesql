@@ -1,0 +1,18 @@
+@model DbProxy.Dashboard.Models.DashboardViewModel
+
+<div class="stat-card">
+    <div class="label">Active Sessions</div>
+    <div class="value">@Model.ActiveSessions.Count</div>
+</div>
+<div class="stat-card">
+    <div class="label">Connected Now</div>
+    <div class="value">@Model.ConnectedNow</div>
+</div>
+<div class="stat-card">
+    <div class="label">Total Queries</div>
+    <div class="value">@Model.TotalQueries</div>
+</div>
+<div class="stat-card">
+    <div class="label">Total Sessions</div>
+    <div class="value">@Model.TotalSessions</div>
+</div>

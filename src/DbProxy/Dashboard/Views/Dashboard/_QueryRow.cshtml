@@ -1,0 +1,31 @@
+@model DbProxy.Query.QueryLogEntry
+
+@{
+    var ago = DateTime.UtcNow - Model.Timestamp;
+    var agoStr = ago.TotalSeconds < 60 ? $"{(int)ago.TotalSeconds}s ago"
+        : ago.TotalMinutes < 60 ? $"{(int)ago.TotalMinutes}m ago"
+        : $"{(int)ago.TotalHours}h ago";
+}
+<tr>
+    <td>@agoStr</td>
+    <td>@Model.AgentId</td>
+    <td class="query-text" title="@Model.Query">@Model.Query</td>
+    <td style="font-size: 11px; color: #737373;">
+        @if (Model.Context != null)
+        {
+            @string.Join(", ", Model.Context.Select(kv => $"{kv.Key}={kv.Value}"))
+        }
+    </td>
+    <td>@(Model.RowCount?.ToString() ?? "-")</td>
+    <td>@(Model.DurationMs)ms</td>
+    <td>
+        @if (Model.Success)
+        {
+            <span class="badge badge-green">OK</span>
+        }
+        else
+        {
+            <span class="badge badge-red">Error</span>
+        }
+    </td>
+</tr>

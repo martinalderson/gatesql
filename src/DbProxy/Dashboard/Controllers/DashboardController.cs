@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using DbProxy.Auth;
 using DbProxy.Configuration;
 using DbProxy.Dashboard.Models;
@@ -6,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace DbProxy.Dashboard.Controllers;
 
+[ApiKeyAuth]
 public class DashboardController : Controller
 {
     private readonly SessionManager _sessionManager;
@@ -21,13 +23,100 @@ public class DashboardController : Controller
 
     public IActionResult Index()
     {
+        var model = BuildViewModel();
+        return View(model);
+    }
+
+    [HttpGet("/dashboard/login")]
+    [SkipApiKeyAuth]
+    public IActionResult Login() => View();
+
+    [HttpPost("/dashboard/login")]
+    [SkipApiKeyAuth]
+    public IActionResult LoginPost(string apiKey)
+    {
+        if (string.IsNullOrEmpty(apiKey) || !_config.Auth.ParentApiKeys.Any(k => k.Key == apiKey))
+        {
+            ViewBag.Error = "Invalid API key";
+            return View("Login");
+        }
+
+        Response.Cookies.Append("gatesql_key", apiKey, new CookieOptions
+        {
+            HttpOnly = true,
+            SameSite = SameSiteMode.Strict,
+            MaxAge = TimeSpan.FromDays(30),
+        });
+
+        return RedirectToAction("Index");
+    }
+
+    [HttpPost("/dashboard/logout")]
+    public IActionResult Logout()
+    {
+        Response.Cookies.Delete("gatesql_key");
+        return RedirectToAction("Login");
+    }
+
+    [HttpPost("/dashboard/revoke/{sessionId}")]
+    public IActionResult Revoke(string sessionId)
+    {
+        _sessionManager.RevokeSession(sessionId);
+        var model = BuildViewModel();
+        return PartialView("_SessionsTable", model);
+    }
+
+    [HttpGet("/dashboard/events")]
+    public async Task Events(CancellationToken ct)
+    {
+        Response.ContentType = "text/event-stream";
+        Response.Headers.CacheControl = "no-cache";
+        Response.Headers.Connection = "keep-alive";
+
+        // Subscribe to new query events
+        var queryQueue = new ConcurrentQueue<QueryLogEntry>();
+        void OnQuery(QueryLogEntry entry) => queryQueue.Enqueue(entry);
+        _queryLogger.OnQueryLogged += OnQuery;
+
+        try
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                // Push stats + sessions every 2s
+                var model = BuildViewModel();
+                var statsHtml = await RenderPartialAsync("_Stats", model);
+                var sessionsHtml = await RenderPartialAsync("_SessionsTable", model);
+
+                await WriteSseEvent("stats", statsHtml, ct);
+                await WriteSseEvent("sessions", sessionsHtml, ct);
+
+                // Push any queued query events
+                while (queryQueue.TryDequeue(out var entry))
+                {
+                    var queryHtml = await RenderPartialAsync("_QueryRow", entry);
+                    await WriteSseEvent("query", queryHtml, ct);
+                }
+
+                await Response.Body.FlushAsync(ct);
+                await Task.Delay(2000, ct);
+            }
+        }
+        catch (OperationCanceledException) { }
+        finally
+        {
+            _queryLogger.OnQueryLogged -= OnQuery;
+        }
+    }
+
+    private DashboardViewModel BuildViewModel()
+    {
         var allSessions = _sessionManager.GetAllSessions();
         var activeSessions = allSessions
             .Where(s => !s.IsRevoked && DateTime.UtcNow < s.ExpiresAt)
             .Select(SessionViewModel.FromSession)
             .ToList();
 
-        var model = new DashboardViewModel
+        return new DashboardViewModel
         {
             ActiveSessions = activeSessions,
             RecentQueries = _queryLogger.GetRecentQueries(50).ToList(),
@@ -36,14 +125,33 @@ public class DashboardController : Controller
             TotalQueries = allSessions.Sum(s => s.QueriesUsed),
             IdleTimeoutMinutes = _config.Auth.IdleTimeoutMinutes,
         };
-
-        return View(model);
     }
 
-    [HttpPost]
-    public IActionResult Revoke(string sessionId)
+    private async Task<string> RenderPartialAsync(string viewName, object model)
     {
-        _sessionManager.RevokeSession(sessionId);
-        return RedirectToAction("Index");
+        ViewData.Model = model;
+        using var writer = new StringWriter();
+        var viewEngine = HttpContext.RequestServices.GetRequiredService<Microsoft.AspNetCore.Mvc.ViewEngines.ICompositeViewEngine>();
+        var viewResult = viewEngine.FindView(ControllerContext, viewName, false);
+        if (!viewResult.Success)
+            return $"<!-- view {viewName} not found -->";
+
+        var viewContext = new Microsoft.AspNetCore.Mvc.Rendering.ViewContext(
+            ControllerContext, viewResult.View, ViewData, TempData, writer, new Microsoft.AspNetCore.Mvc.ViewFeatures.HtmlHelperOptions());
+        await viewResult.View.RenderAsync(viewContext);
+        return writer.ToString();
+    }
+
+    private async Task WriteSseEvent(string eventName, string data, CancellationToken ct)
+    {
+        // SSE format: each data line must be prefixed with "data: "
+        var lines = data.Replace("\r\n", "\n").Split('\n');
+        await Response.WriteAsync($"event: {eventName}\n", ct);
+        foreach (var line in lines)
+            await Response.WriteAsync($"data: {line}\n", ct);
+        await Response.WriteAsync("\n", ct);
     }
 }
+
+[AttributeUsage(AttributeTargets.Method)]
+public class SkipApiKeyAuthAttribute : Attribute { }

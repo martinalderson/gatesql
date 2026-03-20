@@ -56,9 +56,12 @@ public class QueryLogger : IDisposable
         _flushTimer = new Timer(_ => Flush(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
     }
 
+    public event Action<QueryLogEntry>? OnQueryLogged;
+
     public void Log(QueryLogEntry entry)
     {
         _buffer.Enqueue(entry);
+        OnQueryLogged?.Invoke(entry);
     }
 
     public IReadOnlyList<QueryLogEntry> GetRecentQueries(int count = 100)
