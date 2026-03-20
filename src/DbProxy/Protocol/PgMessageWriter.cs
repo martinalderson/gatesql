@@ -124,6 +124,14 @@ public static class PgMessageWriter
         await WriteMessageAsync(stream, PgMessageTypes.ServerNoticeResponse, ms.ToArray(), ct);
     }
 
+    public static byte[] BuildSslRequestMessage()
+    {
+        var buf = new byte[8];
+        BinaryPrimitives.WriteInt32BigEndian(buf.AsSpan(0), 8);
+        BinaryPrimitives.WriteInt32BigEndian(buf.AsSpan(4), PgMessageTypes.SslRequestCode);
+        return buf;
+    }
+
     public static byte[] BuildStartupMessage(string user, string database)
     {
         using var ms = new MemoryStream();

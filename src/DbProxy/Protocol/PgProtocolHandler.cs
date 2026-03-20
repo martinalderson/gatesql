@@ -19,6 +19,8 @@ public class PgProtocolHandler : IDisposable
     private readonly QueryLogger _queryLogger;
     private readonly TcpListener _listener;
     private readonly X509Certificate2? _tlsCert;
+    private readonly X509Certificate2? _upstreamCaCert;
+    private readonly X509Certificate2? _upstreamClientCert;
     private readonly ILogger<PgProtocolHandler> _logger;
     private CancellationTokenSource? _cts;
 
@@ -39,6 +41,11 @@ public class PgProtocolHandler : IDisposable
 
         if (config.Proxy.TlsCertPath != null && config.Proxy.TlsKeyPath != null)
             _tlsCert = X509Certificate2.CreateFromPemFile(config.Proxy.TlsCertPath, config.Proxy.TlsKeyPath);
+
+        if (config.Upstream.SslCaCertPath != null)
+            _upstreamCaCert = X509CertificateLoader.LoadCertificateFromFile(config.Upstream.SslCaCertPath);
+        if (config.Upstream.SslClientCertPath != null && config.Upstream.SslClientKeyPath != null)
+            _upstreamClientCert = X509Certificate2.CreateFromPemFile(config.Upstream.SslClientCertPath, config.Upstream.SslClientKeyPath);
     }
 
     public async Task StartAsync(CancellationToken ct)
@@ -397,7 +404,38 @@ public class PgProtocolHandler : IDisposable
         {
             var client = new TcpClient();
             await client.ConnectAsync(_config.Upstream.Host, _config.Upstream.Port, ct);
-            var stream = client.GetStream();
+            Stream stream = client.GetStream();
+
+            // SSL negotiation
+            if (_config.Upstream.SslMode != UpstreamSslMode.Disable)
+            {
+                var sslRequest = PgMessageWriter.BuildSslRequestMessage();
+                await stream.WriteAsync(sslRequest, ct);
+                await stream.FlushAsync(ct);
+
+                var responseBuf = new byte[1];
+                var bytesRead = await stream.ReadAsync(responseBuf.AsMemory(0, 1), ct);
+                if (bytesRead == 0)
+                    throw new InvalidOperationException("Connection closed during upstream SSL negotiation");
+
+                if (responseBuf[0] == (byte)'S')
+                {
+                    stream = await UpgradeUpstreamToSslAsync(stream, ct);
+                }
+                else if (responseBuf[0] == (byte)'N')
+                {
+                    if (_config.Upstream.SslMode == UpstreamSslMode.Prefer)
+                        _logger.LogInformation("Upstream does not support SSL, continuing with plain TCP");
+                    else
+                        throw new InvalidOperationException(
+                            $"Upstream PostgreSQL does not support SSL (sslmode={_config.Upstream.SslMode})");
+                }
+                else
+                {
+                    throw new InvalidOperationException(
+                        $"Unexpected SSL response byte from upstream: 0x{responseBuf[0]:X2}");
+                }
+            }
 
             // Send startup message
             var startupMsg = PgMessageWriter.BuildStartupMessage(
@@ -478,6 +516,73 @@ public class PgProtocolHandler : IDisposable
         }
     }
 
+    private async Task<SslStream> UpgradeUpstreamToSslAsync(Stream innerStream, CancellationToken ct)
+    {
+        var sslStream = new SslStream(innerStream, leaveInnerStreamOpen: false,
+            userCertificateValidationCallback: GetUpstreamCertValidationCallback());
+
+        var sslOptions = new SslClientAuthenticationOptions
+        {
+            TargetHost = _config.Upstream.Host,
+        };
+
+        if (_upstreamClientCert != null)
+            sslOptions.ClientCertificates = new X509Certificate2Collection(_upstreamClientCert);
+
+        await sslStream.AuthenticateAsClientAsync(sslOptions, ct);
+
+        _logger.LogInformation("Upstream SSL established: {Protocol}, {CipherSuite}",
+            sslStream.SslProtocol, sslStream.NegotiatedCipherSuite);
+
+        return sslStream;
+    }
+
+    private RemoteCertificateValidationCallback GetUpstreamCertValidationCallback()
+    {
+        return _config.Upstream.SslMode switch
+        {
+            UpstreamSslMode.Require or UpstreamSslMode.Prefer =>
+                (_, _, _, _) => true,
+
+            UpstreamSslMode.VerifyCa =>
+                (_, certificate, _, sslPolicyErrors) =>
+                {
+                    if (sslPolicyErrors == SslPolicyErrors.None)
+                        return true;
+                    var relevant = sslPolicyErrors & ~SslPolicyErrors.RemoteCertificateNameMismatch;
+                    if (relevant == SslPolicyErrors.None)
+                        return true;
+                    return ValidateWithCaCert(certificate);
+                },
+
+            UpstreamSslMode.VerifyFull =>
+                (_, certificate, _, sslPolicyErrors) =>
+                {
+                    if (sslPolicyErrors == SslPolicyErrors.None)
+                        return true;
+                    if (sslPolicyErrors.HasFlag(SslPolicyErrors.RemoteCertificateNameMismatch))
+                        return false;
+                    return ValidateWithCaCert(certificate);
+                },
+
+            _ => throw new InvalidOperationException(
+                $"SSL validation callback called for SslMode={_config.Upstream.SslMode}"),
+        };
+    }
+
+    private bool ValidateWithCaCert(X509Certificate? certificate)
+    {
+        if (certificate == null || _upstreamCaCert == null)
+            return false;
+
+        using var chain = new X509Chain();
+        chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
+        chain.ChainPolicy.CustomTrustStore.Add(_upstreamCaCert);
+        chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+
+        return chain.Build(new X509Certificate2(certificate));
+    }
+
     private static bool IsInternalQuery(string sql)
     {
         var trimmed = sql.TrimStart();
@@ -510,6 +615,8 @@ public class PgProtocolHandler : IDisposable
         _cts?.Cancel();
         _listener.Stop();
         _tlsCert?.Dispose();
+        _upstreamCaCert?.Dispose();
+        _upstreamClientCert?.Dispose();
         GC.SuppressFinalize(this);
     }
 }

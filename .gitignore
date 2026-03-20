@@ -2,6 +2,7 @@ bin/
 obj/
 keys/
 logs/
+data/
 *.user
 *.log
 appsettings.Development.json

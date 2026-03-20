@@ -82,6 +82,9 @@ PGPASSWORD="<token>" psql -h 127.0.0.1 -p 15432 -U agent -d postgres
 Config is JSON (`config.json`). Key fields:
 - `proxy.listenPort` — port the proxy listens on (default 15432)
 - `upstream.host/port/username/password` — real PostgreSQL connection
+- `upstream.sslMode` — upstream SSL mode: disable (default), prefer, require, verify-ca, verify-full
+- `upstream.sslCaCertPath` — CA cert path (required for verify-ca/verify-full)
+- `upstream.sslClientCertPath/sslClientKeyPath` — optional client cert for mTLS
 - `auth.hardCapMinutes` — max session lifetime (default 480 = 8h)
 - `auth.idleTimeoutMinutes` — idle disconnect (default 15)
 - `auth.parentApiKeys` — API keys for session creation

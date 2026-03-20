@@ -17,12 +17,17 @@ if (File.Exists(configPath))
     config = JsonSerializer.Deserialize<ProxyConfig>(json, new JsonSerializerOptions
     {
         PropertyNameCaseInsensitive = true,
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
     }) ?? new ProxyConfig();
 }
 else
 {
     config = new ProxyConfig();
-    var json = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
+    var json = JsonSerializer.Serialize(config, new JsonSerializerOptions
+    {
+        WriteIndented = true,
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
+    });
     File.WriteAllText(configPath, json);
     Console.WriteLine($"Created default config at {configPath}");
 }
@@ -38,6 +43,15 @@ if (Environment.GetEnvironmentVariable("GATESQL_UPSTREAM_PASSWORD") is { } pass)
     config.Upstream.Password = pass;
 if (Environment.GetEnvironmentVariable("GATESQL_UPSTREAM_DATABASE") is { } db)
     config.Upstream.Database = db;
+if (Environment.GetEnvironmentVariable("GATESQL_UPSTREAM_SSLMODE") is { } sslMode
+    && Enum.TryParse<UpstreamSslMode>(sslMode, ignoreCase: true, out var parsedSslMode))
+    config.Upstream.SslMode = parsedSslMode;
+if (Environment.GetEnvironmentVariable("GATESQL_UPSTREAM_SSL_CA_CERT") is { } caCert)
+    config.Upstream.SslCaCertPath = caCert;
+if (Environment.GetEnvironmentVariable("GATESQL_UPSTREAM_SSL_CLIENT_CERT") is { } clientCert)
+    config.Upstream.SslClientCertPath = clientCert;
+if (Environment.GetEnvironmentVariable("GATESQL_UPSTREAM_SSL_CLIENT_KEY") is { } clientKey)
+    config.Upstream.SslClientKeyPath = clientKey;
 if (Environment.GetEnvironmentVariable("GATESQL_API_KEY") is { } apiKey)
     config.Auth.ParentApiKeys = [new ParentApiKey { Name = "env", Key = apiKey }];
 
@@ -91,6 +105,13 @@ builder.Services.AddControllersWithViews()
     });
 
 var app = builder.Build();
+
+// Static files (HTMX, SSE extension)
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(
+        Path.Combine(AppContext.BaseDirectory, "Dashboard", "wwwroot")),
+});
 
 // Admin API
 app.MapAdminApi(config, jwtAuth, sessionManager, queryLogger);

@@ -11,7 +11,8 @@
     "database": "postgres",
     "username": "postgres",
     "password": "postgres",
-    "maxConnections": 20
+    "maxConnections": 20,
+    "sslMode": "disable"
   },
   "auth": {
     "hardCapMinutes": 480,

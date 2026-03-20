@@ -1,4 +1,16 @@
+using System.Text.Json.Serialization;
+
 namespace DbProxy.Configuration;
+
+[JsonConverter(typeof(JsonStringEnumConverter<UpstreamSslMode>))]
+public enum UpstreamSslMode
+{
+    Disable,
+    Prefer,
+    Require,
+    VerifyCa,
+    VerifyFull,
+}
 
 public class ProxyConfig
 {
@@ -26,6 +38,10 @@ public class UpstreamSettings
     public string Username { get; set; } = "postgres";
     public string Password { get; set; } = "";
     public int MaxConnections { get; set; } = 20;
+    public UpstreamSslMode SslMode { get; set; } = UpstreamSslMode.Disable;
+    public string? SslCaCertPath { get; set; }
+    public string? SslClientCertPath { get; set; }
+    public string? SslClientKeyPath { get; set; }
 }
 
 public class AuthSettings
