@@ -36,6 +36,7 @@ jobs:
         env:
           TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
           TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE: /var/run/docker.sock
+          TESTCONTAINERS_RYUK_DISABLED: "true"
 
       - name: Upload test results
         if: always()
