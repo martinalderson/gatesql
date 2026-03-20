@@ -9,22 +9,13 @@ on:
 jobs:
   test:
     runs-on: self-hosted
-    container:
-      image: mcr.microsoft.com/dotnet/sdk:10.0
-      options: --add-host=host.docker.internal:host-gateway
-      volumes:
-        - /var/run/docker.sock:/var/run/docker.sock
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fix git safe directory
-        run: git config --global --add safe.directory $GITHUB_WORKSPACE
-
-      - name: Install Docker CLI
-        run: |
-          apt-get update && apt-get install -y docker.io
-          docker version
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
 
       - name: Restore
         run: dotnet restore
@@ -34,10 +25,6 @@ jobs:
 
       - name: Test
         run: dotnet test --no-build --logger "trx;LogFileName=results.trx"
-        env:
-          TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
-          TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE: /var/run/docker.sock
-          TESTCONTAINERS_RYUK_DISABLED: "true"
 
       - name: Upload test results
         if: always()
@@ -45,7 +32,3 @@ jobs:
         with:
           name: test-results
           path: "**/*.trx"
-
-      - name: Fix workspace permissions
-        if: always()
-        run: chown -R $(stat -c '%u:%g' .) .
