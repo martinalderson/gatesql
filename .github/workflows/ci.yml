@@ -10,12 +10,12 @@ jobs:
   test:
     runs-on: self-hosted
 
+    env:
+      DOTNET_ROOT: /home/github-runner/.dotnet
+      PATH: /home/github-runner/.dotnet:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "10.0.x"
 
       - name: Restore
         run: dotnet restore
