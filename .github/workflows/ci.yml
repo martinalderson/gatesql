@@ -9,13 +9,21 @@ on:
 jobs:
   test:
     runs-on: self-hosted
+    container:
+      image: mcr.microsoft.com/dotnet/sdk:10.0
+      volumes:
+        - /var/run/docker.sock:/var/run/docker.sock
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "10.0.x"
+      - name: Fix git safe directory
+        run: git config --global --add safe.directory $GITHUB_WORKSPACE
+
+      - name: Install Docker CLI
+        run: |
+          apt-get update && apt-get install -y docker.io
+          docker version
 
       - name: Restore
         run: dotnet restore
@@ -25,6 +33,9 @@ jobs:
 
       - name: Test
         run: dotnet test --no-build --logger "trx;LogFileName=results.trx"
+        env:
+          TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
+          TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE: /var/run/docker.sock
 
       - name: Upload test results
         if: always()
