@@ -12,7 +12,7 @@ dotnet run --project src/DbProxy -- /home/martin/source/db-proxy/config.json
 ## Test
 
 ```bash
-dotnet test                    # 19 integration tests (uses Testcontainers — requires Docker)
+dotnet test                    # 29 integration tests (uses Testcontainers — requires Docker)
 ./scripts/restart-proxy.sh    # restart proxy (kills existing, starts fresh)
 ./scripts/benchmark.sh        # pgbench comparison: proxy vs direct
 ```
@@ -34,6 +34,7 @@ Browser ──HTTP──► MVC Dashboard (port 8080)
 - **Session expiry**: JWT `exp` = hard cap (default 8h). Proxy-side idle timeout with sliding window (default 15min). Both enforced.
 - **Purpose enforcement**: All queries must include `/* <agent_purpose>reason</agent_purpose> */`. Queries without it are rejected with an error message. Internal driver queries (pg_catalog, SET, BEGIN, etc.) are exempt.
 - **Upstream auth**: Proxy handles MD5 and SCRAM-SHA-256 password auth with upstream PG.
+- **Upstream SSL/TLS**: Supports sslmode disable/prefer/require/verify-ca/verify-full for upstream connections.
 
 ### Performance
 - Message relay uses `ArrayPool<byte>` — zero allocations in the hot path
@@ -97,3 +98,17 @@ Config is JSON (`config.json`). Key fields:
 - Logs directory is also relative. Same advice.
 - The dashboard has no auth — it's accessible to anyone who can reach port 8080.
 - pgbench scripts in `bench/` include purpose comments; standard pgbench built-in scripts will be rejected.
+
+## CI/CD
+
+- **CI** (`.github/workflows/ci.yml`) — runs on PRs and pushes to main. Self-hosted runner on mini PC, .NET 10 pre-installed at `/home/github-runner/.dotnet`.
+- **Docker Build** (`.github/workflows/docker.yml`) — pushes `gatesql/gatesql` to Docker Hub on pushes to main and version tags (`v*`). Requires `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` secrets.
+
+## Environment variable overrides
+
+All upstream config can be set via env vars (useful for Docker/CI):
+- `GATESQL_UPSTREAM_HOST`, `GATESQL_UPSTREAM_PORT`, `GATESQL_UPSTREAM_USER`, `GATESQL_UPSTREAM_PASSWORD`, `GATESQL_UPSTREAM_DATABASE`
+- `GATESQL_UPSTREAM_SSLMODE` — disable, prefer, require, verifyca, verifyfull
+- `GATESQL_UPSTREAM_SSL_CA_CERT`, `GATESQL_UPSTREAM_SSL_CLIENT_CERT`, `GATESQL_UPSTREAM_SSL_CLIENT_KEY`
+- `GATESQL_API_KEY` — sets a single API key
+- `GATESQL_DB_CONNECTION` — SQLite connection string
