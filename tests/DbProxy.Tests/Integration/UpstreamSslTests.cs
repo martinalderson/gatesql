@@ -328,7 +328,9 @@ public class UpstreamSslTests : IAsyncLifetime
         using var caKey = RSA.Create(2048);
         var caReq = new CertificateRequest("CN=Test CA", caKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         caReq.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, false, 0, true));
-        using var caCert = caReq.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddYears(1));
+        var notBefore = DateTimeOffset.UtcNow.AddDays(-1);
+        var notAfter = DateTimeOffset.UtcNow.AddYears(1);
+        using var caCert = caReq.CreateSelfSigned(notBefore, notAfter);
 
         using var serverKey = RSA.Create(2048);
         var serverReq = new CertificateRequest($"CN={hostname}", serverKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
@@ -342,7 +344,7 @@ public class UpstreamSslTests : IAsyncLifetime
 
         var serialNumber = new byte[8];
         RandomNumberGenerator.Fill(serialNumber);
-        using var serverCert = serverReq.Create(caCert, DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddYears(1), serialNumber);
+        using var serverCert = serverReq.Create(caCert, notBefore, notAfter, serialNumber);
 
         var caCertPem = caCert.ExportCertificatePem();
         var serverCertPem = serverCert.ExportCertificatePem();
