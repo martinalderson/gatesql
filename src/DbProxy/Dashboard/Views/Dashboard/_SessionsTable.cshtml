@@ -11,7 +11,17 @@
     var idleRemaining = TimeSpan.FromMinutes(Model.IdleTimeoutMinutes) - idle;
     <tr>
         <td><strong>@s.AgentId</strong></td>
-        <td>@s.Task</td>
+        <td>
+            @s.Task
+            @if (s.IsReadOnly)
+            {
+                <span class="badge badge-gray" style="font-size: 9px; margin-left: 4px;">RO</span>
+            }
+            @if (s.AllowedTables is { Count: > 0 })
+            {
+                <span class="badge badge-gray" style="font-size: 9px; margin-left: 4px;" title="@string.Join(", ", s.AllowedTables)">@s.AllowedTables.Count tables</span>
+            }
+        </td>
         <td><span class="badge @s.StatusCss">@s.Status</span></td>
         <td>@s.BudgetDisplay</td>
         <td>

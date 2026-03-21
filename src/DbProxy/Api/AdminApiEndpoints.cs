@@ -26,7 +26,10 @@ public static class AdminApiEndpoints
                 request.AgentId,
                 request.Task,
                 request.QueryBudget,
-                expiresAt);
+                expiresAt,
+                request.ReadOnly ?? false,
+                request.DangerousQueryMode ?? "block",
+                request.AllowedTables);
 
             var token = jwtAuth.GenerateToken(
                 sessionId,
@@ -62,6 +65,9 @@ public static class AdminApiEndpoints
                     LastActivityAt = s.LastActivityAt,
                     IsConnected = s.IsConnected,
                     IsRevoked = s.IsRevoked,
+                    IsReadOnly = s.IsReadOnly,
+                    DangerousQueryMode = s.DangerousQueryMode,
+                    AllowedTables = s.AllowedTables,
                 });
 
             return Results.Json(sessions);
@@ -101,6 +107,15 @@ public class CreateSessionRequest
 
     [JsonPropertyName("queryBudget")]
     public int? QueryBudget { get; set; }
+
+    [JsonPropertyName("readOnly")]
+    public bool? ReadOnly { get; set; }
+
+    [JsonPropertyName("dangerousQueryMode")]
+    public string? DangerousQueryMode { get; set; }
+
+    [JsonPropertyName("allowedTables")]
+    public List<string>? AllowedTables { get; set; }
 }
 
 public class CreateSessionResponse
@@ -146,4 +161,13 @@ public class SessionDto
 
     [JsonPropertyName("isRevoked")]
     public bool IsRevoked { get; set; }
+
+    [JsonPropertyName("isReadOnly")]
+    public bool IsReadOnly { get; set; }
+
+    [JsonPropertyName("dangerousQueryMode")]
+    public string DangerousQueryMode { get; set; } = "block";
+
+    [JsonPropertyName("allowedTables")]
+    public List<string>? AllowedTables { get; set; }
 }
