@@ -2,6 +2,10 @@
 
 Secure PostgreSQL wire protocol proxy for AI agents. Agents connect with standard PG clients using short-lived JWTs as passwords.
 
+## Tracking
+
+GitHub Issues are for product/engineering work only (features, bugs, infra). Marketing, launch strategy, and business planning live in `docs/strategy/`.
+
 ## Build & Run
 
 ```bash
