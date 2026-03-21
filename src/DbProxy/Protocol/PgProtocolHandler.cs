@@ -307,6 +307,35 @@ public class PgProtocolHandler : IDisposable
                             continue;
                         }
 
+                        // Query governance: read-only, dangerous query detection, table allowlists
+                        if (!SqlCommentParser.IsBudgetCheck(queryText) && !IsInternalQuery(queryText))
+                        {
+                            var governanceError = CheckQueryGovernance(session, queryText);
+                            if (governanceError != null)
+                            {
+                                await PgMessageWriter.WriteErrorResponseAsync(clientStream, "ERROR", "42501",
+                                    governanceError, proxyCts.Token);
+
+                                _queryLogger.Log(new QueryLogEntry
+                                {
+                                    AgentId = claims.AgentId,
+                                    SessionId = claims.SessionId,
+                                    Task = claims.Task,
+                                    Query = queryText,
+                                    RowCount = 0,
+                                    DurationMs = 0,
+                                    Success = false,
+                                    Error = governanceError,
+                                });
+
+                                if (type == PgMessageTypes.ClientParse)
+                                    discardUntilSync = true;
+                                else
+                                    await PgMessageWriter.WriteReadyForQueryAsync(clientStream, ct: proxyCts.Token);
+                                continue;
+                            }
+                        }
+
                         if (SqlCommentParser.IsBudgetCheck(queryText))
                         {
                             var remaining = _sessionManager.GetRemainingBudget(session.SessionId);
@@ -581,6 +610,46 @@ public class PgProtocolHandler : IDisposable
         chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
 
         return chain.Build(new X509Certificate2(certificate));
+    }
+
+    private string? CheckQueryGovernance(AgentSession session, string queryText)
+    {
+        var analysis = QueryAnalyzer.Analyze(queryText);
+
+        // Read-only enforcement
+        if (session.IsReadOnly && analysis.Type is StatementType.Write or StatementType.Ddl)
+        {
+            return $"Query rejected — session is read-only.\n" +
+                   $"This session only allows SELECT, EXPLAIN, and SHOW queries.\n" +
+                   $"Detected: {analysis.Type} statement";
+        }
+
+        // Dangerous query detection
+        if (analysis.IsDangerous && session.DangerousQueryMode == "block")
+        {
+            return $"Query rejected — dangerous operation detected.\n" +
+                   $"Reason: {analysis.DangerReason}\n" +
+                   $"Add a WHERE clause or contact your administrator.";
+        }
+
+        if (analysis.IsDangerous && session.DangerousQueryMode == "warn")
+        {
+            _logger.LogWarning("Dangerous query from agent {AgentId} (session {SessionId}): {Reason} — {Query}",
+                session.AgentId, session.SessionId, analysis.DangerReason, queryText);
+        }
+
+        // Table allowlist enforcement
+        if (session.AllowedTables is { Count: > 0 } && analysis.TableNames.Count > 0)
+        {
+            var disallowed = QueryAnalyzer.CheckTableAllowlist(analysis.TableNames, session.AllowedTables);
+            if (disallowed != null)
+            {
+                return $"Query rejected — table \"{disallowed}\" is not accessible in this session.\n" +
+                       $"Allowed tables: {string.Join(", ", session.AllowedTables)}";
+            }
+        }
+
+        return null;
     }
 
     private static bool IsInternalQuery(string sql)

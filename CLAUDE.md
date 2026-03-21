@@ -12,7 +12,7 @@ dotnet run --project src/DbProxy -- /home/martin/source/db-proxy/config.json
 ## Test
 
 ```bash
-dotnet test                    # 29 integration tests (uses Testcontainers — requires Docker)
+dotnet test                    # 83 tests: 36 unit + 47 integration (uses Testcontainers — requires Docker)
 ./scripts/restart-proxy.sh    # restart proxy (kills existing, starts fresh)
 ./scripts/benchmark.sh        # pgbench comparison: proxy vs direct
 ```
@@ -33,6 +33,7 @@ Browser ──HTTP──► MVC Dashboard (port 8080)
 - **Auth model**: Parent-delegated JWTs. The entity spawning the agent calls `POST /api/sessions` to get a short-lived JWT. Agent uses it as `PGPASSWORD`. Agent never holds long-lived credentials.
 - **Session expiry**: JWT `exp` = hard cap (default 8h). Proxy-side idle timeout with sliding window (default 15min). Both enforced.
 - **Purpose enforcement**: All queries must include `/* <agent_purpose>reason</agent_purpose> */`. Queries without it are rejected with an error message. Internal driver queries (pg_catalog, SET, BEGIN, etc.) are exempt.
+- **Query governance**: AST-based query analysis via `libpg_query` (PostgreSQL's actual parser). Supports read-only sessions, dangerous query detection (DROP/TRUNCATE/DELETE without WHERE), and per-session table allowlists.
 - **Upstream auth**: Proxy handles MD5 and SCRAM-SHA-256 password auth with upstream PG.
 - **Upstream SSL/TLS**: Supports sslmode disable/prefer/require/verify-ca/verify-full for upstream connections.
 
@@ -49,7 +50,7 @@ Browser ──HTTP──► MVC Dashboard (port 8080)
 src/DbProxy/
   Protocol/          # PG wire protocol (reader, writer, handler, message types)
   Auth/              # JWT signing/validation, session manager
-  Query/             # SQL comment parser, query logger, budget tracking
+  Query/             # SQL comment parser, query logger, budget tracking, AST-based query analyzer
   Api/               # Admin API endpoints (session CRUD)
   Dashboard/         # MVC dashboard (Controllers, Views, Models)
   Configuration/     # Config model (maps to config.json)
@@ -66,7 +67,7 @@ All endpoints require `X-Api-Key` header matching a key in `config.json`.
 # Create session
 curl -X POST http://localhost:8080/api/sessions \
   -H "Content-Type: application/json" -H "X-Api-Key: pk_dev_123" \
-  -d '{"agentId":"my-agent","task":"my-task","queryBudget":100}'
+  -d '{"agentId":"my-agent","task":"my-task","queryBudget":100,"readOnly":true,"dangerousQueryMode":"block","allowedTables":["public.orders","public.products"]}'
 
 # List sessions
 curl http://localhost:8080/api/sessions -H "X-Api-Key: pk_dev_123"

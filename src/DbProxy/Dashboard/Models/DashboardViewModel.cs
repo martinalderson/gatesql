@@ -25,6 +25,9 @@ public class SessionViewModel
     public DateTime LastActivityAt { get; init; }
     public bool IsConnected { get; init; }
     public bool IsRevoked { get; init; }
+    public bool IsReadOnly { get; init; }
+    public string DangerousQueryMode { get; init; } = "block";
+    public List<string>? AllowedTables { get; init; }
 
     public string Status =>
         IsRevoked ? "Revoked" :
@@ -65,5 +68,8 @@ public class SessionViewModel
         LastActivityAt = s.LastActivityAt,
         IsConnected = s.IsConnected,
         IsRevoked = s.IsRevoked,
+        IsReadOnly = s.IsReadOnly,
+        DangerousQueryMode = s.DangerousQueryMode,
+        AllowedTables = s.AllowedTables,
     };
 }

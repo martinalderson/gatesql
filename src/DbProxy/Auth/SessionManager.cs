@@ -17,6 +17,9 @@ public record AgentSession
     public DateTime LastActivityAt { get; set; } = DateTime.UtcNow;
     public bool IsConnected { get; set; }
     public bool IsRevoked { get; set; }
+    public bool IsReadOnly { get; init; }
+    public string DangerousQueryMode { get; init; } = "block";
+    public List<string>? AllowedTables { get; init; }
 }
 
 public class SessionManager : IDisposable
@@ -63,11 +66,17 @@ public class SessionManager : IDisposable
                 LastActivityAt = e.LastActivityAt,
                 IsConnected = false, // reset on restart
                 IsRevoked = e.IsRevoked,
+                IsReadOnly = e.IsReadOnly,
+                DangerousQueryMode = e.DangerousQueryMode ?? "block",
+                AllowedTables = e.AllowedTablesJson != null
+                    ? System.Text.Json.JsonSerializer.Deserialize<List<string>>(e.AllowedTablesJson)
+                    : null,
             });
         }
     }
 
-    public AgentSession CreateSession(string sessionId, string agentId, string task, int? queryBudget, DateTime expiresAt)
+    public AgentSession CreateSession(string sessionId, string agentId, string task, int? queryBudget, DateTime expiresAt,
+        bool isReadOnly = false, string dangerousQueryMode = "block", List<string>? allowedTables = null)
     {
         var session = new AgentSession
         {
@@ -76,6 +85,9 @@ public class SessionManager : IDisposable
             Task = task,
             QueryBudget = queryBudget,
             ExpiresAt = expiresAt,
+            IsReadOnly = isReadOnly,
+            DangerousQueryMode = dangerousQueryMode,
+            AllowedTables = allowedTables,
         };
 
         if (!_sessions.TryAdd(sessionId, session))
@@ -96,6 +108,9 @@ public class SessionManager : IDisposable
                 LastActivityAt = session.LastActivityAt,
                 IsConnected = false,
                 IsRevoked = false,
+                IsReadOnly = session.IsReadOnly,
+                DangerousQueryMode = session.DangerousQueryMode,
+                AllowedTablesJson = session.AllowedTables != null ? System.Text.Json.JsonSerializer.Serialize(session.AllowedTables) : null,
             });
             db.SaveChanges();
         }

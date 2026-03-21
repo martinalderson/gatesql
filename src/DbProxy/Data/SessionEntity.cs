@@ -15,4 +15,7 @@ public class SessionEntity
     public DateTime LastActivityAt { get; set; }
     public bool IsConnected { get; set; }
     public bool IsRevoked { get; set; }
+    public bool IsReadOnly { get; set; }
+    public string? DangerousQueryMode { get; set; }
+    public string? AllowedTablesJson { get; set; }
 }
