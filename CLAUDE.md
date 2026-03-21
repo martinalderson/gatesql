@@ -6,6 +6,8 @@ Secure PostgreSQL wire protocol proxy for AI agents. Agents connect with standar
 
 GitHub Issues are for product/engineering work only (features, bugs, infra).
 
+Landing page, docs site, and strategy docs live in a separate repo: `martinalderson/gatesql.dev` (`~/source/gatesql.dev`). Both directories may be available in the same session.
+
 ## Build & Run
 
 ```bash
