@@ -393,8 +393,7 @@ public class PgProtocolHandler : IDisposable
                                 ? $"{session.QueriesUsed} of {session.QueryBudget.Value} queries used"
                                 : $"{session.QueriesUsed} queries used";
                             await PgMessageWriter.WriteErrorResponseAsync(clientStream, "FATAL", "53400",
-                                $"Query budget exhausted — {budgetDisplay}.\n\n" +
-                                "This session has no remaining queries. A new session is required to continue.", proxyCts.Token);
+                                $"Query budget exhausted — {budgetDisplay}. Retrying queries will not work, you should stop.", proxyCts.Token);
                             return;
                         }
 
