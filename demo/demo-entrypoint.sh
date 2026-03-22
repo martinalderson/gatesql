@@ -24,25 +24,5 @@ if ! su -c "$PGBIN/psql -lqt" postgres | grep -qw demo; then
     su -c "$PGBIN/psql -q -d demo -f /app/demo-store.sql" postgres
 fi
 
-echo ""
-echo "========================================="
-echo "  GateSQL Demo"
-echo "========================================="
-echo "  Proxy:     localhost:15432"
-echo "  Dashboard: http://localhost:8080"
-echo "  API Key:   pk_demo_key"
-echo ""
-echo "  Quick start:"
-echo "    # Create a session"
-echo "    curl -s -X POST http://localhost:8080/api/sessions \\"
-echo "      -H 'Content-Type: application/json' \\"
-echo "      -H 'X-Api-Key: pk_demo_key' \\"
-echo "      -d '{\"agentId\":\"demo-agent\",\"task\":\"explore demo data\"}'"
-echo ""
-echo "    # Connect (use token from response as password)"
-echo "    PGPASSWORD=<token> psql -h localhost -p 15432 -U agent -d demo"
-echo "========================================="
-echo ""
-
 # Start GateSQL proxy (foreground)
 exec dotnet DbProxy.dll /app/config.json

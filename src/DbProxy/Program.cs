@@ -160,39 +160,33 @@ Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
 var proxyTask = Task.Run(() => pgHandler.StartAsync(cts.Token));
 
 // Print startup banner
+Console.WriteLine();
+Console.WriteLine(@"   ██████   █████  ████████ ███████ ┌──────────────────────────────┐");
+Console.WriteLine(@"  ██       ██   ██    ██    ██      │ ███████  ██████  ██          │");
+Console.WriteLine(@"  ██   ███ ███████    ██    █████   │ ██      ██    ██ ██          │");
+Console.WriteLine(@"  ██    ██ ██   ██    ██    ██      │ ███████ ██    ██ ██          │");
+Console.WriteLine(@"   ██████  ██   ██    ██    ███████ │      ██ ██ ██ ██ ██          │");
+Console.WriteLine(@"                                    │ ███████  ██████  ███████     │");
+Console.WriteLine(@"                                    └──────────────────────────────┘");
+Console.WriteLine();
+Console.WriteLine($"  Dashboard:  http://localhost:{config.Dashboard.Port}");
+Console.WriteLine($"  Proxy:      localhost:{config.Proxy.ListenPort}");
 if (isFirstRun)
 {
-    var generatedKey = config.Auth.ParentApiKeys[0].Key;
-    Console.WriteLine();
-    Console.WriteLine(@"   ██████   █████  ████████ ███████ ┌──────────────────────────────┐");
-    Console.WriteLine(@"  ██       ██   ██    ██    ██      │ ███████  ██████  ██          │");
-    Console.WriteLine(@"  ██   ███ ███████    ██    █████   │ ██      ██    ██ ██          │");
-    Console.WriteLine(@"  ██    ██ ██   ██    ██    ██      │ ███████ ██    ██ ██          │");
-    Console.WriteLine(@"   ██████  ██   ██    ██    ███████ │      ██ ██ ██ ██ ██          │");
-    Console.WriteLine(@"                                    │ ███████  ██████  ███████     │");
-    Console.WriteLine(@"                                    └──────────────────────────────┘");
-    Console.WriteLine();
-    Console.WriteLine($"  Dashboard:  http://localhost:{config.Dashboard.Port}");
-    Console.WriteLine($"  Proxy:      localhost:{config.Proxy.ListenPort}");
-    Console.WriteLine($"  API Key:    {generatedKey}");
+    Console.WriteLine($"  API Key:    {config.Auth.ParentApiKeys[0].Key}");
     Console.WriteLine();
     Console.WriteLine("  Open the dashboard to configure your database");
     Console.WriteLine("  and create your first agent session.");
-    Console.WriteLine();
 
     // Docker persistence warning
     if (Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true")
     {
+        Console.WriteLine();
         Console.WriteLine("  \u26a0 Mount /app/data for persistence across restarts:");
         Console.WriteLine("    docker run -v gatesql-data:/app/data ...");
-        Console.WriteLine();
     }
 }
-else
-{
-    Console.WriteLine($"Admin API + Dashboard: http://localhost:{config.Dashboard.Port}");
-    Console.WriteLine($"PG Proxy: localhost:{config.Proxy.ListenPort}");
-}
+Console.WriteLine();
 
 // Run web host (blocks until shutdown)
 await app.RunAsync(cts.Token);
