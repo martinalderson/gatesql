@@ -45,7 +45,6 @@ public class SessionManager : IDisposable
         if (_dbFactory == null) return;
 
         await using var db = await _dbFactory.CreateDbContextAsync();
-        await db.Database.EnsureCreatedAsync();
 
         // Load active sessions into memory
         var sessions = await db.Sessions

@@ -2,8 +2,10 @@ using System.Collections.Concurrent;
 using DbProxy.Auth;
 using DbProxy.Configuration;
 using DbProxy.Dashboard.Models;
+using DbProxy.Data;
 using DbProxy.Query;
 using Microsoft.AspNetCore.Mvc;
+using Npgsql;
 
 namespace DbProxy.Dashboard.Controllers;
 
@@ -13,18 +15,95 @@ public class DashboardController : Controller
     private readonly SessionManager _sessionManager;
     private readonly QueryLogger _queryLogger;
     private readonly ProxyConfig _config;
+    private readonly SettingsStore _settingsStore;
+    private readonly SetupState _setupState;
 
-    public DashboardController(SessionManager sessionManager, QueryLogger queryLogger, ProxyConfig config)
+    public DashboardController(SessionManager sessionManager, QueryLogger queryLogger, ProxyConfig config, SettingsStore settingsStore, SetupState setupState)
     {
         _sessionManager = sessionManager;
         _queryLogger = queryLogger;
         _config = config;
+        _settingsStore = settingsStore;
+        _setupState = setupState;
     }
 
     public IActionResult Index()
     {
         var model = BuildViewModel();
         return View(model);
+    }
+
+    [HttpGet("/dashboard/setup")]
+    [SkipApiKeyAuth]
+    public IActionResult Setup()
+    {
+        if (!_setupState.SetupRequired)
+            return RedirectToAction("Login");
+
+        return View(BuildSetupViewModel());
+    }
+
+    [HttpPost("/dashboard/setup/test")]
+    [SkipApiKeyAuth]
+    public async Task<IActionResult> SetupTest(string host, int port, string database, string username, string password)
+    {
+        try
+        {
+            var connStr = $"Host={host};Port={port};Database={database};Username={username};Password={password};Timeout=5";
+            await using var conn = new NpgsqlConnection(connStr);
+            await conn.OpenAsync();
+            await using var cmd = new NpgsqlCommand("SELECT version()", conn);
+            var version = await cmd.ExecuteScalarAsync();
+            return Content($"<div class=\"test-result success\">Connected — {version}</div>", "text/html");
+        }
+        catch (Exception ex)
+        {
+            return Content($"<div class=\"test-result failure\">Connection failed: {ex.Message}</div>", "text/html");
+        }
+    }
+
+    [HttpPost("/dashboard/setup")]
+    [SkipApiKeyAuth]
+    public async Task<IActionResult> SetupSave(string host, int port, string database, string username, string password, string sslMode)
+    {
+        if (!Enum.TryParse<UpstreamSslMode>(sslMode, ignoreCase: true, out var parsedSslMode))
+            parsedSslMode = UpstreamSslMode.Disable;
+
+        var upstream = new UpstreamSettings
+        {
+            Host = host,
+            Port = port,
+            Database = database,
+            Username = username,
+            Password = password,
+            SslMode = parsedSslMode,
+        };
+
+        // Save to SQLite
+        await _settingsStore.SaveUpstreamConfig(upstream);
+
+        // Hot-reload in-memory config
+        _config.Upstream.Host = upstream.Host;
+        _config.Upstream.Port = upstream.Port;
+        _config.Upstream.Database = upstream.Database;
+        _config.Upstream.Username = upstream.Username;
+        _config.Upstream.Password = upstream.Password;
+        _config.Upstream.SslMode = upstream.SslMode;
+
+        // Setup complete
+        _setupState.SetupRequired = false;
+
+        return RedirectToAction("Login");
+    }
+
+    private SetupViewModel BuildSetupViewModel()
+    {
+        return new SetupViewModel
+        {
+            ApiKey = _config.Auth.ParentApiKeys.FirstOrDefault()?.Key ?? "",
+            ProxyPort = _config.Proxy.ListenPort,
+            DashboardPort = _config.Dashboard.Port,
+        };
     }
 
     [HttpGet("/dashboard/login")]

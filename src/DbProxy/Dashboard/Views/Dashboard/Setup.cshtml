@@ -1,0 +1,110 @@
+@model DbProxy.Dashboard.Models.SetupViewModel
+@{
+    Layout = "_Layout";
+}
+
+<style>
+    .setup-container { max-width: 520px; margin: 60px auto; padding: 32px; }
+    .setup-container h1 { font-size: 22px; font-weight: 600; margin-bottom: 6px; }
+    .setup-container .subtitle { font-size: 14px; color: #737373; margin-bottom: 32px; }
+    .setup-section { margin-bottom: 28px; }
+    .setup-section h2 { font-size: 13px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; color: #737373; margin-bottom: 12px; }
+    .api-key-box { background: #111; border: 1px solid #1a1a1a; border-radius: 8px; padding: 16px; display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+    .api-key-box code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 14px; color: #4ade80; flex: 1; word-break: break-all; }
+    .api-key-box button { background: #1a1a1a; border: 1px solid #333; color: #a3a3a3; padding: 6px 12px; border-radius: 4px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+    .api-key-box button:hover { color: #e5e5e5; border-color: #525252; }
+    .api-key-hint { font-size: 12px; color: #525252; }
+    .form-group { margin-bottom: 12px; }
+    .form-group label { display: block; font-size: 12px; color: #a3a3a3; margin-bottom: 4px; }
+    .form-group input, .form-group select { width: 100%; background: #111; border: 1px solid #1a1a1a; color: #e5e5e5; padding: 10px 12px; border-radius: 6px; font-size: 14px; font-family: inherit; }
+    .form-group input:focus, .form-group select:focus { outline: none; border-color: #333; }
+    .form-group select { appearance: none; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .btn-primary { background: #e5e5e5; color: #0a0a0a; border: none; padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; width: 100%; }
+    .btn-primary:hover { background: #d4d4d4; }
+    .btn-secondary { background: transparent; color: #a3a3a3; border: 1px solid #1a1a1a; padding: 10px 20px; border-radius: 6px; font-size: 14px; cursor: pointer; width: 100%; }
+    .btn-secondary:hover { color: #e5e5e5; border-color: #333; }
+    .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px; }
+    .test-result { margin-top: 12px; padding: 12px; border-radius: 6px; font-size: 13px; }
+    .test-result.success { background: #052e16; color: #4ade80; border: 1px solid #166534; }
+    .test-result.failure { background: #2a0a0a; color: #f87171; border: 1px solid #7f1d1d; }
+    .divider { border: none; border-top: 1px solid #1a1a1a; margin: 28px 0; }
+</style>
+
+<div class="setup-container">
+    <h1>Welcome to GateSQL</h1>
+    <p class="subtitle">Secure database access for AI agents. Connect your PostgreSQL to get started.</p>
+
+    <div class="setup-section">
+        <h2>Your API Key</h2>
+        <div class="api-key-box">
+            <code id="api-key">@Model.ApiKey</code>
+            <button onclick="navigator.clipboard.writeText(document.getElementById('api-key').textContent)">Copy</button>
+        </div>
+        <p class="api-key-hint">Use this key to create agent sessions via the API. Save it — you'll need it to log in.</p>
+    </div>
+
+    <hr class="divider">
+
+    <div class="setup-section">
+        <h2>Connect Your Database</h2>
+
+        <form id="setup-form" method="post" action="/dashboard/setup">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Host</label>
+                    <input type="text" name="host" value="@Model.Host" placeholder="localhost">
+                </div>
+                <div class="form-group">
+                    <label>Port</label>
+                    <input type="number" name="port" value="@Model.Port" placeholder="5432">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Database</label>
+                <input type="text" name="database" value="@Model.Database" placeholder="postgres">
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Username</label>
+                    <input type="text" name="username" value="@Model.Username" placeholder="postgres">
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" name="password" value="@Model.Password">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>SSL Mode</label>
+                <select name="sslMode">
+                    <option value="disable" selected="@(Model.SslMode == "disable")">Disable</option>
+                    <option value="prefer" selected="@(Model.SslMode == "prefer")">Prefer</option>
+                    <option value="require" selected="@(Model.SslMode == "require")">Require</option>
+                    <option value="verifyCa" selected="@(Model.SslMode == "verifyCa")">Verify CA</option>
+                    <option value="verifyFull" selected="@(Model.SslMode == "verifyFull")">Verify Full</option>
+                </select>
+            </div>
+
+            <div id="test-result">
+                @if (Model.TestResult != null)
+                {
+                    <div class="test-result @(Model.TestSuccess ? "success" : "failure")">@Model.TestResult</div>
+                }
+            </div>
+
+            <div class="btn-row">
+                <button type="button" class="btn-secondary"
+                    hx-post="/dashboard/setup/test"
+                    hx-include="#setup-form"
+                    hx-target="#test-result"
+                    hx-swap="innerHTML">
+                    Test Connection
+                </button>
+                <button type="submit" class="btn-primary">Save &amp; Continue</button>
+            </div>
+        </form>
+    </div>
+</div>

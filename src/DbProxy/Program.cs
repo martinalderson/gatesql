@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using DbProxy.Api;
 using DbProxy.Auth;
@@ -23,13 +24,6 @@ if (File.Exists(configPath))
 else
 {
     config = new ProxyConfig();
-    var json = JsonSerializer.Serialize(config, new JsonSerializerOptions
-    {
-        WriteIndented = true,
-        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
-    });
-    File.WriteAllText(configPath, json);
-    Console.WriteLine($"Created default config at {configPath}");
 }
 
 // Apply environment variable overrides
@@ -87,6 +81,26 @@ if (dbPath != null)
 var sp = builder.Services.BuildServiceProvider();
 var dbFactory = sp.GetRequiredService<IDbContextFactory<GateSqlDbContext>>();
 
+// Create full schema first (Sessions, QueryLogs, etc.), then add Settings table
+await using (var initDb = await dbFactory.CreateDbContextAsync())
+    await initDb.Database.EnsureCreatedAsync();
+var settingsStore = new SettingsStore(dbFactory);
+await settingsStore.InitializeAsync();
+settingsStore.ApplyApiKeyToConfig(config);
+settingsStore.ApplyUpstreamToConfig(config);
+
+// First-run detection: no API keys after all config sources
+var isFirstRun = config.Auth.ParentApiKeys.Count == 0;
+var needsSetup = isFirstRun && !settingsStore.HasUpstreamConfig();
+if (isFirstRun)
+{
+    var generatedKey = $"gatesql_pk_{Convert.ToHexString(RandomNumberGenerator.GetBytes(8)).ToLowerInvariant()}";
+    config.Auth.ParentApiKeys = [new ParentApiKey { Name = "auto-generated", Key = generatedKey }];
+    await settingsStore.SaveApiKey(generatedKey);
+}
+
+var setupState = new DbProxy.Dashboard.SetupState { SetupRequired = needsSetup };
+
 var sessionManager = new SessionManager(TimeSpan.FromMinutes(config.Auth.IdleTimeoutMinutes), dbFactory);
 await sessionManager.InitializeAsync();
 
@@ -96,6 +110,8 @@ var queryLogger = new QueryLogger(dbFactory);
 builder.Services.AddSingleton(config);
 builder.Services.AddSingleton(sessionManager);
 builder.Services.AddSingleton(queryLogger);
+builder.Services.AddSingleton(settingsStore);
+builder.Services.AddSingleton(setupState);
 builder.Services.AddControllersWithViews()
     .AddRazorOptions(options =>
     {
@@ -133,8 +149,40 @@ Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
 
 var proxyTask = Task.Run(() => pgHandler.StartAsync(cts.Token));
 
-Console.WriteLine($"Admin API + Dashboard: http://localhost:{config.Dashboard.Port}");
-Console.WriteLine($"PG Proxy: localhost:{config.Proxy.ListenPort}");
+// Print startup banner
+if (isFirstRun)
+{
+    var generatedKey = config.Auth.ParentApiKeys[0].Key;
+    Console.WriteLine();
+    Console.WriteLine(@"   ██████   █████  ████████ ███████ ┌──────────────────────────────┐");
+    Console.WriteLine(@"  ██       ██   ██    ██    ██      │ ███████  ██████  ██          │");
+    Console.WriteLine(@"  ██   ███ ███████    ██    █████   │ ██      ██    ██ ██          │");
+    Console.WriteLine(@"  ██    ██ ██   ██    ██    ██      │ ███████ ██    ██ ██          │");
+    Console.WriteLine(@"   ██████  ██   ██    ██    ███████ │      ██ ██ ██ ██ ██          │");
+    Console.WriteLine(@"                                    │ ███████  ██████  ███████     │");
+    Console.WriteLine(@"                                    └──────────────────────────────┘");
+    Console.WriteLine();
+    Console.WriteLine($"  Dashboard:  http://localhost:{config.Dashboard.Port}");
+    Console.WriteLine($"  Proxy:      localhost:{config.Proxy.ListenPort}");
+    Console.WriteLine($"  API Key:    {generatedKey}");
+    Console.WriteLine();
+    Console.WriteLine("  Open the dashboard to configure your database");
+    Console.WriteLine("  and create your first agent session.");
+    Console.WriteLine();
+
+    // Docker persistence warning
+    if (Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true")
+    {
+        Console.WriteLine("  \u26a0 Mount /app/data for persistence across restarts:");
+        Console.WriteLine("    docker run -v gatesql-data:/app/data ...");
+        Console.WriteLine();
+    }
+}
+else
+{
+    Console.WriteLine($"Admin API + Dashboard: http://localhost:{config.Dashboard.Port}");
+    Console.WriteLine($"PG Proxy: localhost:{config.Proxy.ListenPort}");
+}
 
 // Run web host (blocks until shutdown)
 await app.RunAsync(cts.Token);
