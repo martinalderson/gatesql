@@ -10,6 +10,7 @@ public class PostgresVersionMatrixTests
         "postgres:15",
         "postgres:16",
         "postgres:17",
+        "postgres:18",
     };
 
     [Theory]

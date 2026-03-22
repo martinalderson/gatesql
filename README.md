@@ -457,7 +457,7 @@ dotnet run --project src/DbProxy -- config.json
 dotnet test
 ```
 
-Tests use [Testcontainers](https://testcontainers.com/) to spin up PostgreSQL in Docker. No local PostgreSQL install needed. The test suite runs against PostgreSQL versions 14-17.
+Tests use [Testcontainers](https://testcontainers.com/) to spin up PostgreSQL in Docker. No local PostgreSQL install needed. The test suite runs against PostgreSQL versions 14-18.
 
 ### Benchmark
 

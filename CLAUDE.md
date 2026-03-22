@@ -18,12 +18,12 @@ dotnet run --project src/DbProxy -- /home/martin/source/db-proxy/config.json
 ## Test
 
 ```bash
-dotnet test                    # 83 tests: 36 unit + 47 integration (uses Testcontainers — requires Docker)
+dotnet test                    # 97 tests: 48 unit + 49 integration (uses Testcontainers — requires Docker)
 ./scripts/restart-proxy.sh    # restart proxy (kills existing, starts fresh)
 ./scripts/benchmark.sh        # pgbench comparison: proxy vs direct
 ```
 
-Tests use Testcontainers to spin up PostgreSQL in Docker. No local PG install needed. Version matrix tests run against PG 14–17.
+Tests use Testcontainers to spin up PostgreSQL in Docker. No local PG install needed. Version matrix tests run against PG 14–18.
 
 ## Architecture
 
