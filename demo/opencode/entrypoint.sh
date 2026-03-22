@@ -20,6 +20,8 @@ fi
 
 # If GateSQL connection string provided, make psql available with it
 if [ -n "$DATABASE_URL" ]; then
+    # Replace localhost with host.docker.internal for Docker networking
+    DATABASE_URL=$(echo "$DATABASE_URL" | sed 's/@localhost:/@host.docker.internal:/g')
     PROMPT="You have psql available. Connection string: $DATABASE_URL
 
 $PROMPT"
