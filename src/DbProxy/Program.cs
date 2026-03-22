@@ -63,9 +63,12 @@ var isDevelopment = builder.Environment.IsDevelopment();
 if (!isDevelopment)
 {
     builder.Logging.ClearProviders();
-    builder.Logging.AddConsole();
+    builder.Logging.AddSimpleConsole(o => { o.SingleLine = true; });
     builder.Logging.SetMinimumLevel(LogLevel.Warning);
     builder.Logging.AddFilter("DbProxy", LogLevel.Information);
+    builder.Logging.AddFilter("Microsoft.Hosting.Lifetime", LogLevel.Warning);
+    builder.Logging.AddFilter("Microsoft.EntityFrameworkCore", LogLevel.Warning);
+    builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
 }
 
 // EF Core + SQLite
