@@ -59,7 +59,9 @@ var jwtAuth = new JwtAuthenticator(signingKeyManager);
 // Build web app for admin API + dashboard
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.UseUrls($"http://0.0.0.0:{config.Dashboard.Port}");
-builder.Logging.SetMinimumLevel(LogLevel.Information);
+var isDevelopment = builder.Environment.IsDevelopment();
+builder.Logging.SetMinimumLevel(isDevelopment ? LogLevel.Information : LogLevel.Warning);
+builder.Logging.AddFilter("DbProxy", LogLevel.Information);
 
 // EF Core + SQLite
 builder.Services.AddDbContextFactory<GateSqlDbContext>(options =>
