@@ -21,7 +21,7 @@ done
 # Seed demo database (idempotent)
 if ! su -c "$PGBIN/psql -lqt" postgres | grep -qw demo; then
     su -c "$PGBIN/createdb demo" postgres
-    su -c "$PGBIN/psql -q -d demo -f /app/demo-store.sql" postgres
+    su -c "$PGBIN/psql -q -d demo -f /app/demo-store.sql" postgres > /dev/null
 fi
 
 # Start GateSQL proxy (foreground)

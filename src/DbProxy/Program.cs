@@ -171,9 +171,13 @@ Console.WriteLine(@"                                    └───────
 Console.WriteLine();
 Console.WriteLine($"  Dashboard:  http://localhost:{config.Dashboard.Port}");
 Console.WriteLine($"  Proxy:      localhost:{config.Proxy.ListenPort}");
-if (isFirstRun)
+var isDemo = Environment.GetEnvironmentVariable("GATESQL_DEMO") == "true";
+if (isFirstRun || isDemo)
 {
     Console.WriteLine($"  API Key:    {config.Auth.ParentApiKeys[0].Key}");
+}
+if (isFirstRun)
+{
     Console.WriteLine();
     Console.WriteLine("  Open the dashboard to configure your database");
     Console.WriteLine("  and create your first agent session.");

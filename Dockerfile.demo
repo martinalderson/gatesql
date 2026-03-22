@@ -20,6 +20,8 @@ COPY demo/demo-store.sql /app/demo-store.sql
 COPY demo/demo-entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
+ENV GATESQL_DEMO=true
+
 EXPOSE 15432 8080
 
 ENTRYPOINT ["/app/entrypoint.sh"]
