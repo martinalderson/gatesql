@@ -69,8 +69,10 @@ GateSQL is designed to get you running in under a minute. No config file is need
 ### 1. Start GateSQL
 
 ```bash
-# Docker
-docker run --rm -p 15432:15432 -p 8080:8080 gatesql/gatesql
+# Docker (add --add-host flag on Linux to reach host PostgreSQL)
+docker run --rm -p 15432:15432 -p 8080:8080 \
+  --add-host=host.docker.internal:host-gateway \
+  gatesql/gatesql
 
 # Or from source (.NET 10 SDK required)
 git clone https://github.com/martinalderson/gatesql.git
@@ -367,10 +369,23 @@ GateSQL includes a web dashboard at `http://localhost:8080` that shows:
 
 ## Docker
 
+### Connecting to PostgreSQL
+
+From inside a Docker container, `localhost` refers to the container itself — not your host machine. Use the appropriate hostname for your setup:
+
+| PostgreSQL location | Host to use | Notes |
+|---|---|---|
+| On your host machine | `host.docker.internal` | On Linux, add `--add-host=host.docker.internal:host-gateway` to your docker run command |
+| In another container | Container name (e.g. `postgres`) | Both containers must be on the same Docker network |
+| Remote server | Hostname or IP (e.g. `db.example.com`) | Works as-is |
+
+The setup wizard shows this hint automatically when running in Docker.
+
 ### Basic
 
 ```bash
 docker run -p 15432:15432 -p 8080:8080 \
+  --add-host=host.docker.internal:host-gateway \
   -e GATESQL_UPSTREAM_HOST=host.docker.internal \
   -e GATESQL_UPSTREAM_PASSWORD=secret \
   -e GATESQL_API_KEY=pk_prod_abc123 \
@@ -381,6 +396,7 @@ docker run -p 15432:15432 -p 8080:8080 \
 
 ```bash
 docker run -p 15432:15432 -p 8080:8080 \
+  --add-host=host.docker.internal:host-gateway \
   -v gatesql-data:/app/data \
   -v gatesql-logs:/app/logs \
   -v gatesql-keys:/app/keys \
