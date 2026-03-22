@@ -68,7 +68,7 @@ if (!isDevelopment)
     builder.Logging.AddFilter("DbProxy", LogLevel.Information);
     builder.Logging.AddFilter("Microsoft.Hosting.Lifetime", LogLevel.Warning);
     builder.Logging.AddFilter("Microsoft.EntityFrameworkCore", LogLevel.Warning);
-    builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
+    builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Error);
 }
 
 // EF Core + SQLite
