@@ -12,6 +12,16 @@ if [ -n "$AUTH_JSON_BASE64" ]; then
     echo "$AUTH_JSON_BASE64" | base64 -d > ~/.local/share/opencode/auth.json
 fi
 
+# Allow all permissions — the container is the sandbox
+cat > /workspace/opencode.json << 'CONF'
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "*": "allow"
+  }
+}
+CONF
+
 # Build model flag
 MODEL_FLAG=""
 if [ -n "$MODEL" ]; then
