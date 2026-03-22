@@ -60,8 +60,13 @@ var jwtAuth = new JwtAuthenticator(signingKeyManager);
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.UseUrls($"http://0.0.0.0:{config.Dashboard.Port}");
 var isDevelopment = builder.Environment.IsDevelopment();
-builder.Logging.SetMinimumLevel(isDevelopment ? LogLevel.Information : LogLevel.Warning);
-builder.Logging.AddFilter("DbProxy", LogLevel.Information);
+if (!isDevelopment)
+{
+    builder.Logging.ClearProviders();
+    builder.Logging.AddConsole();
+    builder.Logging.SetMinimumLevel(LogLevel.Warning);
+    builder.Logging.AddFilter("DbProxy", LogLevel.Information);
+}
 
 // EF Core + SQLite
 builder.Services.AddDbContextFactory<GateSqlDbContext>(options =>
