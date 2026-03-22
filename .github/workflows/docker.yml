@@ -29,8 +29,6 @@ jobs:
           tags: |
             gatesql/gatesql:latest
             gatesql/gatesql:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
       - name: Build and push demo image
         uses: docker/build-push-action@v6
@@ -40,5 +38,3 @@ jobs:
           push: true
           tags: |
             gatesql/gatesql:demo
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
