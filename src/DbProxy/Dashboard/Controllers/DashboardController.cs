@@ -103,6 +103,7 @@ public class DashboardController : Controller
             ApiKey = _config.Auth.ParentApiKeys.FirstOrDefault()?.Key ?? "",
             ProxyPort = _config.Proxy.ListenPort,
             DashboardPort = _config.Dashboard.Port,
+            IsDocker = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true",
         };
     }
 

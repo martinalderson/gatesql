@@ -29,6 +29,8 @@
     .test-result.success { background: #052e16; color: #4ade80; border: 1px solid #166534; }
     .test-result.failure { background: #2a0a0a; color: #f87171; border: 1px solid #7f1d1d; }
     .divider { border: none; border-top: 1px solid #1a1a1a; margin: 28px 0; }
+    .docker-hint { background: #1a1a00; border: 1px solid #333300; border-radius: 6px; padding: 12px; font-size: 12px; color: #fbbf24; margin-bottom: 16px; line-height: 1.5; }
+    .docker-hint code { background: #111; padding: 2px 5px; border-radius: 3px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 11px; }
 </style>
 
 <div class="setup-container">
@@ -48,6 +50,14 @@
 
     <div class="setup-section">
         <h2>Connect Your Database</h2>
+
+        @if (Model.IsDocker)
+        {
+            <div class="docker-hint">
+                Running in Docker — use <code>host.docker.internal</code> to connect to PostgreSQL on your host machine.
+                On Linux, add <code>--add-host=host.docker.internal:host-gateway</code> to your docker run command.
+            </div>
+        }
 
         <form id="setup-form" method="post" action="/dashboard/setup">
             <div class="form-row">

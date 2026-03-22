@@ -14,6 +14,8 @@ public class SetupViewModel
     public string Password { get; init; } = "";
     public string SslMode { get; init; } = "disable";
 
+    public bool IsDocker { get; init; }
+
     public string? Error { get; init; }
     public string? TestResult { get; init; }
     public bool TestSuccess { get; init; }
