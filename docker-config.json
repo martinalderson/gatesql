@@ -4,11 +4,11 @@
     "listenHost": "0.0.0.0"
   },
   "upstream": {
-    "host": "host.docker.internal",
+    "host": "localhost",
     "port": 5432,
     "database": "postgres",
     "username": "postgres",
-    "password": "postgres",
+    "password": "",
     "maxConnections": 20,
     "sslMode": "disable"
   },
@@ -16,9 +16,7 @@
     "hardCapMinutes": 480,
     "idleTimeoutMinutes": 15,
     "signingKeyPath": "/app/keys/signing.key",
-    "parentApiKeys": [
-      { "name": "default", "key": "CHANGE_ME" }
-    ]
+    "parentApiKeys": []
   },
   "logging": {
     "directory": "/app/logs"
