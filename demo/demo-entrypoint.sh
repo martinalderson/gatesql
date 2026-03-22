@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# PostgreSQL binaries are installed under a versioned path
+export PATH="/usr/lib/postgresql/$(ls /usr/lib/postgresql/)/bin:$PATH"
+
 PGDATA="/var/lib/postgresql/data"
 
 # Initialize PostgreSQL if needed
