@@ -6,30 +6,22 @@ PGDATA="/var/lib/postgresql/data"
 
 # Initialize PostgreSQL if needed
 if [ ! -f "$PGDATA/PG_VERSION" ]; then
-    echo "Initializing PostgreSQL..."
-    su -c "$PGBIN/initdb -D $PGDATA" postgres
-    # Allow local connections without password
+    su -c "$PGBIN/initdb -D $PGDATA --auth-local=trust --auth-host=trust" postgres > /dev/null
     echo "host all all 127.0.0.1/32 trust" >> "$PGDATA/pg_hba.conf"
 fi
 
 # Start PostgreSQL
-echo "Starting PostgreSQL..."
-su -c "$PGBIN/pg_ctl start -D $PGDATA -l /var/log/postgresql.log -o '-c listen_addresses=localhost'" postgres
+su -c "$PGBIN/pg_ctl start -D $PGDATA -l /var/log/postgresql.log -o '-c listen_addresses=localhost'" postgres > /dev/null
 
 # Wait for PostgreSQL to be ready
-echo "Waiting for PostgreSQL..."
 until su -c "$PGBIN/pg_isready -q" postgres; do
     sleep 0.5
 done
 
 # Seed demo database (idempotent)
 if ! su -c "$PGBIN/psql -lqt" postgres | grep -qw demo; then
-    echo "Creating demo database..."
     su -c "$PGBIN/createdb demo" postgres
-    su -c "$PGBIN/psql -d demo -f /app/demo-store.sql" postgres
-    echo "Demo database seeded."
-else
-    echo "Demo database already exists, skipping seed."
+    su -c "$PGBIN/psql -q -d demo -f /app/demo-store.sql" postgres
 fi
 
 echo ""

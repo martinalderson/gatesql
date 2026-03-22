@@ -63,6 +63,7 @@ src/DbProxy/
 config.json          # Runtime config (ports, upstream, auth keys, timeouts)
 bench/               # pgbench scripts with purpose comments baked in
 scripts/             # restart-proxy.sh, benchmark.sh
+demo/                # Demo Docker image (Dockerfile.demo, seed data, entrypoint, config)
 ```
 
 ## API
@@ -109,7 +110,7 @@ Config is JSON (`config.json`). Key fields:
 ## CI/CD
 
 - **CI** (`.github/workflows/ci.yml`) — runs on PRs and pushes to main. Self-hosted runner on mini PC, .NET 10 pre-installed at `/home/github-runner/.dotnet`.
-- **Docker Build** (`.github/workflows/docker.yml`) — pushes `gatesql/gatesql` to Docker Hub on pushes to main and version tags (`v*`). Requires `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` secrets.
+- **Docker Build** (`.github/workflows/docker.yml`) — pushes `gatesql/gatesql:latest` and `gatesql/gatesql:demo` to Docker Hub on pushes to main and version tags (`v*`). The demo image (`Dockerfile.demo`) bundles PostgreSQL + seed data. Requires `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` secrets.
 
 ## Environment variable overrides
 

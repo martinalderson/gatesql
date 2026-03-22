@@ -381,6 +381,16 @@ From inside a Docker container, `localhost` refers to the container itself — n
 
 The setup wizard shows this hint automatically when running in Docker.
 
+### Try it (no PostgreSQL needed)
+
+The `demo` tag bundles PostgreSQL with sample data — a full working GateSQL instance in one command:
+
+```bash
+docker run -p 15432:15432 -p 8080:8080 gatesql/gatesql:demo
+```
+
+Open http://localhost:8080 to see the dashboard. The API key is `pk_demo_key`. The demo database includes customers, orders, products, reviews, and more.
+
 ### Basic
 
 ```bash

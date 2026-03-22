@@ -303,9 +303,7 @@ SELECT
     -- shipped_at
     CASE WHEN age > INTERVAL '3 days' THEN now() - age + INTERVAL '1 day' + (random() * INTERVAL '2 days') ELSE NULL END,
     -- delivered_at
-    CASE WHEN age > INTERVAL '7 days' THEN now() - age + INTERVAL '4 days' + (random() * INTERVAL '3 days') ELSE NULL END,
-    -- dummy
-    age
+    CASE WHEN age > INTERVAL '7 days' THEN now() - age + INTERVAL '4 days' + (random() * INTERVAL '3 days') ELSE NULL END
 FROM (
     SELECT (random() * 90)::int * INTERVAL '1 day' + (random() * INTERVAL '23 hours') AS age
     FROM generate_series(1, 200)
