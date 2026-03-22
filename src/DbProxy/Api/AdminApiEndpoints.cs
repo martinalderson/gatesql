@@ -38,11 +38,17 @@ public static class AdminApiEndpoints
                 request.QueryBudget,
                 lifetime);
 
+            var host = config.Proxy.ListenHost == "0.0.0.0" ? "localhost" : config.Proxy.ListenHost;
+            var port = config.Proxy.ListenPort;
+            var database = config.Upstream.Database;
+
             return Results.Json(new CreateSessionResponse
             {
                 Token = token,
                 SessionId = sessionId,
                 ExpiresAt = expiresAt,
+                ConnectionString = $"postgresql://agent:{Uri.EscapeDataString(token)}@{host}:{port}/{database}",
+                PsqlCommand = $"PGPASSWORD=\"{token}\" psql -h {host} -p {port} -U agent -d {database}",
             });
         });
 
@@ -128,6 +134,12 @@ public class CreateSessionResponse
 
     [JsonPropertyName("expiresAt")]
     public DateTime ExpiresAt { get; set; }
+
+    [JsonPropertyName("connectionString")]
+    public string ConnectionString { get; set; } = "";
+
+    [JsonPropertyName("psqlCommand")]
+    public string PsqlCommand { get; set; } = "";
 }
 
 public class SessionDto

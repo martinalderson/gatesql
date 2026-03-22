@@ -125,19 +125,24 @@ public class SessionManager : IDisposable
 
     public bool ValidateSession(string sessionId)
     {
+        return GetInvalidReason(sessionId) == null;
+    }
+
+    public string? GetInvalidReason(string sessionId)
+    {
         if (!_sessions.TryGetValue(sessionId, out var session))
-            return false;
+            return "not_found";
 
         if (session.IsRevoked)
-            return false;
+            return "revoked";
 
         if (DateTime.UtcNow > session.ExpiresAt)
-            return false;
+            return "expired";
 
         if (DateTime.UtcNow - session.LastActivityAt > _idleTimeout)
-            return false;
+            return "idle_timeout";
 
-        return true;
+        return null;
     }
 
     public void TouchSession(string sessionId)

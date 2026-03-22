@@ -132,16 +132,28 @@ public class PgProtocolHandler : IDisposable
                 if (claims == null)
                 {
                     await PgMessageWriter.WriteErrorResponseAsync(clientStream, "FATAL", "28000",
-                        "Invalid or expired session token", ct);
+                        "Authentication failed — these credentials are not valid.\n\n" +
+                        "The token could not be verified. Common causes:\n" +
+                        "  - Token has expired (sessions are short-lived)\n" +
+                        "  - Token was issued by a different GateSQL instance\n" +
+                        "  - Token is malformed or truncated", ct);
                     return;
                 }
 
                 sessionId = claims.SessionId;
 
-                if (!_sessionManager.ValidateSession(sessionId))
+                var invalidReason = _sessionManager.GetInvalidReason(sessionId);
+                if (invalidReason != null)
                 {
+                    var message = invalidReason switch
+                    {
+                        "revoked" => "Authentication failed — this session has been revoked.",
+                        "expired" => $"Authentication failed — this session has expired (max lifetime: {_config.Auth.HardCapMinutes / 60}h).",
+                        "idle_timeout" => $"Authentication failed — this session timed out after {_config.Auth.IdleTimeoutMinutes} minutes of inactivity.",
+                        _ => "Authentication failed — session not found.",
+                    };
                     await PgMessageWriter.WriteErrorResponseAsync(clientStream, "FATAL", "28000",
-                        "Session expired, revoked, or idle too long", ct);
+                        message, ct);
                     return;
                 }
 
@@ -156,7 +168,11 @@ public class PgProtocolHandler : IDisposable
                 if (upstreamConnection == null)
                 {
                     await PgMessageWriter.WriteErrorResponseAsync(clientStream, "FATAL", "08006",
-                        "Failed to connect to upstream database", ct);
+                        $"Cannot connect to upstream PostgreSQL at {_config.Upstream.Host}:{_config.Upstream.Port}.\n\n" +
+                        "Troubleshooting:\n" +
+                        $"  1. Is PostgreSQL running?  pg_isready -h {_config.Upstream.Host} -p {_config.Upstream.Port}\n" +
+                        $"  2. Are the credentials correct for user \"{_config.Upstream.Username}\"?\n" +
+                        "  3. Running in Docker? Use host.docker.internal instead of localhost.", ct);
                     return;
                 }
 
@@ -240,11 +256,22 @@ public class PgProtocolHandler : IDisposable
 
             while (!proxyCts.Token.IsCancellationRequested)
             {
-                if (++messageCount % 100 == 0 && !_sessionManager.ValidateSession(session.SessionId))
+                if (++messageCount % 100 == 0)
                 {
-                    await PgMessageWriter.WriteErrorResponseAsync(clientStream, "FATAL", "57P01",
-                        "Session expired or revoked", proxyCts.Token);
-                    return;
+                    var reason = _sessionManager.GetInvalidReason(session.SessionId);
+                    if (reason != null)
+                    {
+                        var terminateMsg = reason switch
+                        {
+                            "revoked" => "Connection terminated — this session has been revoked.",
+                            "expired" => "Connection terminated — this session has expired.",
+                            "idle_timeout" => "Connection terminated — this session timed out due to inactivity.",
+                            _ => "Connection terminated — these credentials are no longer valid.",
+                        };
+                        await PgMessageWriter.WriteErrorResponseAsync(clientStream, "FATAL", "57P01",
+                            terminateMsg, proxyCts.Token);
+                        return;
+                    }
                 }
 
                 var msg = await PgMessageReader.ReadMessageAsync(clientStream, clientHeaderBuf, proxyCts.Token);
@@ -286,7 +313,11 @@ public class PgProtocolHandler : IDisposable
                             && SqlCommentParser.ExtractPurpose(queryText) == null)
                         {
                             await PgMessageWriter.WriteErrorResponseAsync(clientStream, "ERROR", "42000",
-                                "Query rejected: missing purpose comment. Add /* <agent_purpose>your reason</agent_purpose> */ to your SQL.", proxyCts.Token);
+                                "Query rejected — missing purpose comment.\n\n" +
+                                "Every query must include a comment explaining why it's being run:\n\n" +
+                                "  /* <agent_purpose>analyzing Q1 revenue</agent_purpose> */\n" +
+                                "  SELECT customer_id, SUM(total) FROM orders GROUP BY 1;\n\n" +
+                                "The purpose is logged for audit and can be any text describing intent.", proxyCts.Token);
 
                             _queryLogger.Log(new QueryLogEntry
                             {
@@ -358,8 +389,12 @@ public class PgProtocolHandler : IDisposable
                                 Success = false,
                                 Error = "Budget exhausted",
                             });
+                            var budgetDisplay = session.QueryBudget.HasValue
+                                ? $"{session.QueriesUsed} of {session.QueryBudget.Value} queries used"
+                                : $"{session.QueriesUsed} queries used";
                             await PgMessageWriter.WriteErrorResponseAsync(clientStream, "FATAL", "53400",
-                                "Query budget exhausted for this session", proxyCts.Token);
+                                $"Query budget exhausted — {budgetDisplay}.\n\n" +
+                                "This session has no remaining queries. A new session is required to continue.", proxyCts.Token);
                             return;
                         }
 

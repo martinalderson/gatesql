@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Npgsql;
 
 namespace DbProxy.Tests.Integration;
@@ -16,6 +17,29 @@ public class ProxyIntegrationTests : IAsyncLifetime
 
         Assert.NotEmpty(token);
         Assert.StartsWith("sess_", sessionId);
+    }
+
+    [Fact]
+    public async Task CreateSession_ReturnsConnectionString()
+    {
+        using var http = new HttpClient();
+        http.DefaultRequestHeaders.Add("X-Api-Key", _fixture.ApiKey);
+
+        var response = await http.PostAsJsonAsync(
+            $"http://127.0.0.1:{_fixture.ApiPort}/api/sessions",
+            new { agentId = "conn-test", task = "test" });
+
+        response.EnsureSuccessStatusCode();
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var connStr = body.GetProperty("connectionString").GetString()!;
+        var psqlCmd = body.GetProperty("psqlCommand").GetString()!;
+        var token = body.GetProperty("token").GetString()!;
+
+        Assert.StartsWith("postgresql://agent:", connStr);
+        Assert.Contains($":{_fixture.ProxyPort}/", connStr);
+        Assert.Contains("psql", psqlCmd);
+        Assert.Contains(token, psqlCmd);
     }
 
     [Fact]
@@ -40,7 +64,7 @@ public class ProxyIntegrationTests : IAsyncLifetime
 
         await using var conn = new NpgsqlConnection(connStr);
         var ex = await Assert.ThrowsAsync<PostgresException>(() => conn.OpenAsync());
-        Assert.Contains("Invalid or expired session token", ex.Message);
+        Assert.Contains("credentials are not valid", ex.Message);
     }
 
     [Fact]
@@ -56,7 +80,7 @@ public class ProxyIntegrationTests : IAsyncLifetime
         var connStr = _fixture.BuildConnectionString(token);
         await using var conn = new NpgsqlConnection(connStr);
         var ex = await Assert.ThrowsAsync<PostgresException>(() => conn.OpenAsync());
-        Assert.Contains("expired, revoked, or idle", ex.Message);
+        Assert.Contains("session has been revoked", ex.Message);
     }
 
     [Fact]
@@ -87,7 +111,7 @@ public class ProxyIntegrationTests : IAsyncLifetime
         }
 
         Assert.NotNull(budgetException);
-        Assert.Contains("budget exhausted", budgetException.MessageText);
+        Assert.Contains("Query budget exhausted", budgetException.MessageText);
         Assert.True(succeeded > 0);
         Assert.True(succeeded <= 20);
     }
