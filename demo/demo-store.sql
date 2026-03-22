@@ -1,6 +1,6 @@
 -- Demo ecommerce store schema and seed data for GateSQL demos.
 -- ~50 customers, ~40 products, ~200 orders, ~500 order items, reviews, coupons, and more.
--- Usage: psql -h localhost -p 5432 -U postgres -d postgres -f scripts/demo-store.sql
+-- Usage: psql -h localhost -p 5432 -U postgres -d postgres -f demo/demo-store.sql
 
 BEGIN;
 

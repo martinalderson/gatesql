@@ -23,7 +23,7 @@ RUN mkdir -p /app/keys /app/logs /app/data /var/lib/postgresql/data /var/log && 
 # Copy GateSQL build
 COPY --from=build /app/publish .
 COPY demo/demo-config.json /app/config.json
-COPY scripts/demo-store.sql /app/demo-store.sql
+COPY demo/demo-store.sql /app/demo-store.sql
 COPY demo/demo-entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
