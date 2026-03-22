@@ -1,34 +1,32 @@
 #!/bin/bash
 set -e
 
-# PostgreSQL binaries are installed under a versioned path
-export PATH="/usr/lib/postgresql/$(ls /usr/lib/postgresql/)/bin:$PATH"
-
+PGBIN="/usr/lib/postgresql/$(ls /usr/lib/postgresql/)/bin"
 PGDATA="/var/lib/postgresql/data"
 
 # Initialize PostgreSQL if needed
 if [ ! -f "$PGDATA/PG_VERSION" ]; then
     echo "Initializing PostgreSQL..."
-    su -c "initdb -D $PGDATA" postgres
+    su -c "$PGBIN/initdb -D $PGDATA" postgres
     # Allow local connections without password
     echo "host all all 127.0.0.1/32 trust" >> "$PGDATA/pg_hba.conf"
 fi
 
 # Start PostgreSQL
 echo "Starting PostgreSQL..."
-su -c "pg_ctl start -D $PGDATA -l /var/log/postgresql.log -o '-c listen_addresses=localhost'" postgres
+su -c "$PGBIN/pg_ctl start -D $PGDATA -l /var/log/postgresql.log -o '-c listen_addresses=localhost'" postgres
 
 # Wait for PostgreSQL to be ready
 echo "Waiting for PostgreSQL..."
-until su -c "pg_isready -q" postgres; do
+until su -c "$PGBIN/pg_isready -q" postgres; do
     sleep 0.5
 done
 
 # Seed demo database (idempotent)
-if ! su -c "psql -lqt" postgres | grep -qw demo; then
+if ! su -c "$PGBIN/psql -lqt" postgres | grep -qw demo; then
     echo "Creating demo database..."
-    su -c "createdb demo" postgres
-    su -c "psql -d demo -f /app/demo-store.sql" postgres
+    su -c "$PGBIN/createdb demo" postgres
+    su -c "$PGBIN/psql -d demo -f /app/demo-store.sql" postgres
     echo "Demo database seeded."
 else
     echo "Demo database already exists, skipping seed."
