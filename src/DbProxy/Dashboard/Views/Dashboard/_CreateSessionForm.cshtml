@@ -1,0 +1,49 @@
+<div class="session-form">
+    <h3>Create Agent Session</h3>
+    <p class="form-subtitle">Generate a short-lived JWT for an AI agent to connect via PostgreSQL wire protocol.</p>
+
+    <form hx-post="/dashboard/sessions/create" hx-target="#session-form-area" hx-swap="innerHTML">
+        <div class="form-row">
+            <div class="form-group">
+                <label>Agent ID</label>
+                <input type="text" name="agentId" required placeholder="my-agent">
+            </div>
+            <div class="form-group">
+                <label>Task</label>
+                <input type="text" name="task" required placeholder="Analyze sales data">
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label>Query Budget</label>
+                <input type="number" name="queryBudget" min="1" placeholder="Unlimited">
+            </div>
+            <div class="form-group">
+                <label>Dangerous Query Mode</label>
+                <select name="dangerousQueryMode">
+                    <option value="block" selected>Block</option>
+                    <option value="warn">Warn</option>
+                    <option value="allow">Allow</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Allowed Tables</label>
+            <input type="text" name="allowedTables" placeholder="e.g. public.orders, public.products">
+        </div>
+
+        <div class="form-group">
+            <label class="toggle-label">
+                <input type="checkbox" name="readOnly" value="true">
+                <span>Read-only session</span>
+            </label>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn-primary">Create Session</button>
+            <button type="button" class="btn-secondary" onclick="document.getElementById('session-form-area').innerHTML=''">Cancel</button>
+        </div>
+    </form>
+</div>

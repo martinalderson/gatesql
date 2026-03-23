@@ -13,14 +13,16 @@ namespace DbProxy.Dashboard.Controllers;
 public class DashboardController : Controller
 {
     private readonly SessionManager _sessionManager;
+    private readonly JwtAuthenticator _jwtAuth;
     private readonly QueryLogger _queryLogger;
     private readonly ProxyConfig _config;
     private readonly SettingsStore _settingsStore;
     private readonly SetupState _setupState;
 
-    public DashboardController(SessionManager sessionManager, QueryLogger queryLogger, ProxyConfig config, SettingsStore settingsStore, SetupState setupState)
+    public DashboardController(SessionManager sessionManager, JwtAuthenticator jwtAuth, QueryLogger queryLogger, ProxyConfig config, SettingsStore settingsStore, SetupState setupState)
     {
         _sessionManager = sessionManager;
+        _jwtAuth = jwtAuth;
         _queryLogger = queryLogger;
         _config = config;
         _settingsStore = settingsStore;
@@ -136,6 +138,42 @@ public class DashboardController : Controller
     {
         Response.Cookies.Delete("gatesql_key");
         return RedirectToAction("Login");
+    }
+
+    [HttpGet("/dashboard/sessions/new")]
+    public IActionResult CreateSessionForm()
+    {
+        return PartialView("_CreateSessionForm");
+    }
+
+    [HttpPost("/dashboard/sessions/create")]
+    public IActionResult CreateSession(string agentId, string task, int? queryBudget, bool readOnly, string dangerousQueryMode, string? allowedTables)
+    {
+        var sessionId = $"sess_{Guid.NewGuid():N}";
+        var lifetime = TimeSpan.FromMinutes(_config.Auth.HardCapMinutes);
+        var expiresAt = DateTime.UtcNow.Add(lifetime);
+
+        var parsedTables = string.IsNullOrWhiteSpace(allowedTables)
+            ? null
+            : allowedTables.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+
+        _sessionManager.CreateSession(
+            sessionId, agentId, task, queryBudget, expiresAt,
+            readOnly, dangerousQueryMode ?? "block", parsedTables);
+
+        var token = _jwtAuth.GenerateToken(sessionId, agentId, task, queryBudget, lifetime);
+
+        var host = _config.Proxy.ListenHost == "0.0.0.0" ? "localhost" : _config.Proxy.ListenHost;
+        var port = _config.Proxy.ListenPort;
+        var database = _config.Upstream.Database;
+
+        ViewBag.SessionId = sessionId;
+        ViewBag.Token = token;
+        ViewBag.ExpiresAt = expiresAt;
+        ViewBag.ConnectionString = $"postgresql://agent:{Uri.EscapeDataString(token)}@{host}:{port}/{database}";
+        ViewBag.PsqlCommand = $"PGPASSWORD=\"{token}\" psql -h {host} -p {port} -U agent -d {database}";
+
+        return PartialView("_SessionCreated");
     }
 
     [HttpPost("/dashboard/revoke/{sessionId}")]
