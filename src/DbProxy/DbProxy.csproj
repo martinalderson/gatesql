@@ -7,6 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="DbProxy.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Content Include="Dashboard\wwwroot\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

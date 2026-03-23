@@ -16,4 +16,5 @@ public class QueryLogEntity
     public long DurationMs { get; set; }
     public bool Success { get; set; }
     public string? Error { get; set; }
+    public string? ExemptionReason { get; set; }
 }
