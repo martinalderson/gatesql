@@ -16,8 +16,21 @@
         @await Html.PartialAsync("_Stats", Model)
     </div>
 
+    <div id="session-form-area">
+        @if (Model.ActiveSessions.Count == 0)
+        {
+            @await Html.PartialAsync("_CreateSessionForm")
+        }
+    </div>
+
     <div class="section">
-        <h2>Sessions</h2>
+        <div class="section-header">
+            <h2>Sessions</h2>
+            <button class="btn-new-session"
+                    hx-get="/dashboard/sessions/new"
+                    hx-target="#session-form-area"
+                    hx-swap="innerHTML">+ New Session</button>
+        </div>
         <table>
             <thead>
                 <tr>

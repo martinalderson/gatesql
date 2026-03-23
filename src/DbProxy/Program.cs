@@ -118,6 +118,7 @@ var queryLogger = new QueryLogger(dbFactory);
 
 // Register services for MVC DI
 builder.Services.AddSingleton(config);
+builder.Services.AddSingleton(jwtAuth);
 builder.Services.AddSingleton(sessionManager);
 builder.Services.AddSingleton(queryLogger);
 builder.Services.AddSingleton(settingsStore);
