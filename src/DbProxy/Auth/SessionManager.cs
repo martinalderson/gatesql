@@ -155,11 +155,10 @@ public class SessionManager : IDisposable
         if (!_sessions.TryGetValue(sessionId, out var session))
             return false;
 
-        session.QueriesUsed++;
-
-        if (session.QueryBudget.HasValue && session.QueriesUsed > session.QueryBudget.Value)
+        if (session.QueryBudget.HasValue && session.QueriesUsed >= session.QueryBudget.Value)
             return false;
 
+        session.QueriesUsed++;
         return true;
     }
 
