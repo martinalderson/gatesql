@@ -10,7 +10,7 @@
     <td>@agoStr</td>
     <td>@Model.AgentId</td>
     <td class="query-text" title="@Model.Query">@Model.Query</td>
-    <td style="font-size: 11px; color: #737373;">
+    <td style="font-size: 11px; color: var(--fg-muted);">
         @if (Model.Context != null)
         {
             @string.Join(", ", Model.Context.Select(kv => $"{kv.Key}={kv.Value}"))

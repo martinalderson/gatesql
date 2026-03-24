@@ -35,26 +35,26 @@
             }
             else
             {
-                <span style="color: #f87171;">expired</span>
+                <span style="color: var(--red);">expired</span>
             }
         </td>
         <td>
             @if (idleRemaining.TotalSeconds <= 0)
             {
-                <span style="color: #f87171;">timed out</span>
+                <span style="color: var(--red);">timed out</span>
             }
             else if (idleRemaining.TotalMinutes < 2)
             {
-                <span style="color: #fbbf24;">@($"{(int)idleRemaining.TotalSeconds}s")</span>
+                <span style="color: var(--amber);">@($"{(int)idleRemaining.TotalSeconds}s")</span>
             }
             else
             {
                 @($"{(int)idleRemaining.TotalMinutes}m / {Model.IdleTimeoutMinutes}m")
             }
-            <span style="font-size: 10px; color: #525252; margin-left: 4px;">(idle @s.TimeAgo(s.LastActivityAt))</span>
+            <span style="font-size: 10px; color: var(--fg-dim); margin-left: 4px;">(idle @s.TimeAgo(s.LastActivityAt))</span>
         </td>
         <td>@s.TimeAgo(s.CreatedAt)</td>
-        <td style="font-family: monospace; font-size: 11px; color: #525252;">@s.SessionId[..18]...</td>
+        <td style="font-family: var(--mono); font-size: 11px; color: var(--fg-dim);">@s.SessionId[..18]...</td>
         <td>
             @if (!s.IsRevoked)
             {
