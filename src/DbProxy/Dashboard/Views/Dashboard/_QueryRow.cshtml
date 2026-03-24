@@ -19,7 +19,11 @@
     <td>@(Model.RowCount?.ToString() ?? "-")</td>
     <td>@(Model.DurationMs)ms</td>
     <td>
-        @if (Model.Success)
+        @if (Model.ExemptionReason != null)
+        {
+            <span class="badge badge-yellow" title="@Model.ExemptionReason">Exempt</span>
+        }
+        else if (Model.Success)
         {
             <span class="badge badge-green">OK</span>
         }
