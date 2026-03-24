@@ -17,6 +17,7 @@ public class PgProtocolHandler : IDisposable
     private readonly JwtAuthenticator _jwtAuth;
     private readonly SessionManager _sessionManager;
     private readonly QueryLogger _queryLogger;
+    private readonly SchemaIntrospector? _schemaIntrospector;
     private readonly TcpListener _listener;
     private readonly X509Certificate2? _tlsCert;
     private readonly X509Certificate2? _upstreamCaCert;
@@ -29,12 +30,14 @@ public class PgProtocolHandler : IDisposable
         JwtAuthenticator jwtAuth,
         SessionManager sessionManager,
         QueryLogger queryLogger,
-        ILogger<PgProtocolHandler> logger)
+        ILogger<PgProtocolHandler> logger,
+        SchemaIntrospector? schemaIntrospector = null)
     {
         _config = config;
         _jwtAuth = jwtAuth;
         _sessionManager = sessionManager;
         _queryLogger = queryLogger;
+        _schemaIntrospector = schemaIntrospector;
         _logger = logger;
 
         _listener = new TcpListener(IPAddress.Parse(config.Proxy.ListenHost), config.Proxy.ListenPort);
@@ -186,6 +189,19 @@ public class PgProtocolHandler : IDisposable
                 await PgMessageWriter.WriteParameterStatusAsync(clientStream, "server_encoding", "UTF8", ct);
                 await PgMessageWriter.WriteParameterStatusAsync(clientStream, "client_encoding", "UTF8", ct);
                 await PgMessageWriter.WriteBackendKeyDataAsync(clientStream, Process.GetCurrentProcess().Id, Random.Shared.Next(), ct);
+
+                // Send schema summary as welcome notice
+                if (_schemaIntrospector != null)
+                {
+                    try
+                    {
+                        var schemaSummary = await _schemaIntrospector.GetCompactSummaryAsync();
+                        if (!string.IsNullOrEmpty(schemaSummary))
+                            await PgMessageWriter.WriteNoticeResponseAsync(clientStream, schemaSummary, ct);
+                    }
+                    catch { /* Don't block connection if schema introspection fails */ }
+                }
+
                 await PgMessageWriter.WriteReadyForQueryAsync(clientStream, ct: ct);
 
                 // Phase 6: Proxy messages

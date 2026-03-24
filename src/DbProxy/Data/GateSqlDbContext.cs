@@ -7,6 +7,7 @@ public class GateSqlDbContext : DbContext
     public DbSet<SessionEntity> Sessions => Set<SessionEntity>();
     public DbSet<QueryLogEntity> QueryLogs => Set<QueryLogEntity>();
     public DbSet<SettingsEntity> Settings => Set<SettingsEntity>();
+    public DbSet<SchemaAnnotationEntity> SchemaAnnotations => Set<SchemaAnnotationEntity>();
 
     public GateSqlDbContext(DbContextOptions<GateSqlDbContext> options) : base(options) { }
 

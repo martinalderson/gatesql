@@ -93,7 +93,13 @@ var dbFactory = sp.GetRequiredService<IDbContextFactory<GateSqlDbContext>>();
 
 // Create full schema first (Sessions, QueryLogs, etc.), then add Settings table
 await using (var initDb = await dbFactory.CreateDbContextAsync())
+{
     await initDb.Database.EnsureCreatedAsync();
+    // Migrate: add SchemaAnnotations table (#48)
+    try { await initDb.Database.ExecuteSqlRawAsync(
+        "CREATE TABLE IF NOT EXISTS \"SchemaAnnotations\" (\"TableName\" TEXT PRIMARY KEY, \"Description\" TEXT, \"ExampleQueries\" TEXT, \"Notes\" TEXT)"); }
+    catch { }
+}
 var settingsStore = new SettingsStore(dbFactory);
 await settingsStore.InitializeAsync();
 settingsStore.ApplyApiKeyToConfig(config);
@@ -115,12 +121,14 @@ var sessionManager = new SessionManager(TimeSpan.FromMinutes(config.Auth.IdleTim
 await sessionManager.InitializeAsync();
 
 var queryLogger = new QueryLogger(dbFactory);
+var schemaIntrospector = new DbProxy.Query.SchemaIntrospector(config, dbFactory);
 
 // Register services for MVC DI
 builder.Services.AddSingleton(config);
 builder.Services.AddSingleton(jwtAuth);
 builder.Services.AddSingleton(sessionManager);
 builder.Services.AddSingleton(queryLogger);
+builder.Services.AddSingleton(schemaIntrospector);
 builder.Services.AddSingleton(settingsStore);
 builder.Services.AddSingleton(setupState);
 builder.Services.AddControllersWithViews()
@@ -141,7 +149,7 @@ app.UseStaticFiles(new StaticFileOptions
 });
 
 // Admin API
-app.MapAdminApi(config, jwtAuth, sessionManager, queryLogger);
+app.MapAdminApi(config, jwtAuth, sessionManager, queryLogger, schemaIntrospector);
 
 // Dashboard MVC
 if (config.Dashboard.Enabled)
@@ -153,7 +161,7 @@ if (config.Dashboard.Enabled)
 
 // Start PG proxy in background
 var pgHandler = new PgProtocolHandler(config, jwtAuth, sessionManager, queryLogger,
-    app.Services.GetRequiredService<ILogger<PgProtocolHandler>>());
+    app.Services.GetRequiredService<ILogger<PgProtocolHandler>>(), schemaIntrospector);
 
 var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
