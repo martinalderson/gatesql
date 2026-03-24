@@ -1,0 +1,11 @@
+bin/
+obj/
+tests/
+bench/
+scripts/
+site/
+keys/
+logs/
+*.md
+.git/
+.gitignore

@@ -1,0 +1,42 @@
+<div class="credential-card">
+    <div class="credential-header">
+        <span class="badge badge-green">Session Created</span>
+        <span class="credential-session-id">@ViewBag.SessionId</span>
+    </div>
+
+    <div class="credential-row">
+        <label>Token (PGPASSWORD)</label>
+        <div class="credential-value">
+            <code id="cred-token">@ViewBag.Token</code>
+            <button class="btn-copy" onclick="navigator.clipboard.writeText(document.getElementById('cred-token').textContent)">Copy</button>
+        </div>
+    </div>
+
+    <div class="credential-row">
+        <label>Connection String</label>
+        <div class="credential-value">
+            <code id="cred-connstr">@ViewBag.ConnectionString</code>
+            <button class="btn-copy" onclick="navigator.clipboard.writeText(document.getElementById('cred-connstr').textContent)">Copy</button>
+        </div>
+    </div>
+
+    <div class="credential-row">
+        <label>psql Command</label>
+        <div class="credential-value">
+            <code id="cred-psql">@ViewBag.PsqlCommand</code>
+            <button class="btn-copy" onclick="navigator.clipboard.writeText(document.getElementById('cred-psql').textContent)">Copy</button>
+        </div>
+    </div>
+
+    <div class="credential-row">
+        <label>Expires</label>
+        <div class="credential-value">
+            <code>@ViewBag.ExpiresAt.ToString("yyyy-MM-dd HH:mm:ss") UTC</code>
+        </div>
+    </div>
+
+    <div class="form-actions">
+        <button class="btn-primary" hx-get="/dashboard/sessions/new" hx-target="#session-form-area" hx-swap="innerHTML">Create Another</button>
+        <button class="btn-secondary" onclick="document.getElementById('session-form-area').innerHTML=''">Done</button>
+    </div>
+</div>

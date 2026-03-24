@@ -1,0 +1,16 @@
+@{
+    Layout = "_Layout";
+}
+
+<div class="login-container">
+    <h1 style="font-weight: 700; letter-spacing: -0.02em;">Gate<span style="background: var(--fg); color: var(--bg); padding: 2px 7px; border-radius: 5px; margin-left: 2px;">SQL</span></h1>
+    <p>Enter your API key to access the dashboard.</p>
+    @if (ViewBag.Error != null)
+    {
+        <div class="error">@ViewBag.Error</div>
+    }
+    <form method="post" action="/dashboard/login">
+        <input type="password" name="apiKey" placeholder="pk_..." autofocus />
+        <button type="submit">Sign in</button>
+    </form>
+</div>

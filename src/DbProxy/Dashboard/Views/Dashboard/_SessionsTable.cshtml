@@ -1,0 +1,72 @@
+@model DbProxy.Dashboard.Models.DashboardViewModel
+
+@if (Model.ActiveSessions.Count == 0)
+{
+    <tr><td colspan="9" class="empty">No active sessions — create one above</td></tr>
+}
+@foreach (var s in Model.ActiveSessions)
+{
+    var timeLeft = s.ExpiresAt - DateTime.UtcNow;
+    var idle = DateTime.UtcNow - s.LastActivityAt;
+    var idleRemaining = TimeSpan.FromMinutes(Model.IdleTimeoutMinutes) - idle;
+    <tr>
+        <td><strong>@s.AgentId</strong></td>
+        <td>
+            @s.Task
+            @if (s.IsReadOnly)
+            {
+                <span class="badge badge-gray" style="font-size: 9px; margin-left: 4px;">RO</span>
+            }
+            @if (s.AllowedTables is { Count: > 0 })
+            {
+                <span class="badge badge-gray" style="font-size: 9px; margin-left: 4px;" title="@string.Join(", ", s.AllowedTables)">@s.AllowedTables.Count tables</span>
+            }
+        </td>
+        <td><span class="badge @s.StatusCss">@s.Status</span></td>
+        <td>@s.BudgetDisplay</td>
+        <td>
+            @if (timeLeft.TotalMinutes > 60)
+            {
+                @($"{(int)timeLeft.TotalHours}h {timeLeft.Minutes}m left")
+            }
+            else if (timeLeft.TotalMinutes > 0)
+            {
+                @($"{(int)timeLeft.TotalMinutes}m left")
+            }
+            else
+            {
+                <span style="color: var(--red);">expired</span>
+            }
+        </td>
+        <td>
+            @if (idleRemaining.TotalSeconds <= 0)
+            {
+                <span style="color: var(--red);">timed out</span>
+            }
+            else if (idleRemaining.TotalMinutes < 2)
+            {
+                <span style="color: var(--amber);">@($"{(int)idleRemaining.TotalSeconds}s")</span>
+            }
+            else
+            {
+                @($"{(int)idleRemaining.TotalMinutes}m / {Model.IdleTimeoutMinutes}m")
+            }
+            <span style="font-size: 10px; color: var(--fg-dim); margin-left: 4px;">(idle @s.TimeAgo(s.LastActivityAt))</span>
+        </td>
+        <td>@s.TimeAgo(s.CreatedAt)</td>
+        <td style="font-family: var(--mono); font-size: 11px; color: var(--fg-dim);">@s.SessionId[..18]...</td>
+        <td>
+            @if (!s.IsRevoked)
+            {
+                <button class="btn-revoke"
+                    hx-post="/dashboard/revoke/@s.SessionId"
+                    hx-target="closest tbody"
+                    hx-swap="innerHTML">Revoke</button>
+            }
+            else
+            {
+                <span class="badge badge-red">Revoked</span>
+            }
+        </td>
+    </tr>
+}

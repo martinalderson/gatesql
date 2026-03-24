@@ -1,0 +1,111 @@
+@model DbProxy.Dashboard.Models.SetupViewModel
+@{
+    Layout = "_Layout";
+}
+
+<style>
+    .setup-container { max-width: 520px; margin: 60px auto; padding: 32px; }
+    .setup-container h1 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+    .setup-container .subtitle { font-size: 14px; color: var(--fg-muted); margin-bottom: 32px; }
+    .setup-section { margin-bottom: 28px; }
+    .setup-section h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fg-muted); margin-bottom: 12px; }
+    .api-key-box { background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 10px; padding: 16px; display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+    .api-key-box code { font-family: var(--mono); font-size: 14px; color: var(--accent); flex: 1; word-break: break-all; }
+    .api-key-box button { background: var(--bg-card); border: 1px solid var(--border-strong); color: var(--fg-muted); padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; white-space: nowrap; transition: all 0.15s; }
+    .api-key-box button:hover { color: var(--fg); background: var(--bg-hover); }
+    .api-key-hint { font-size: 12px; color: var(--fg-dim); }
+    .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px; }
+    .btn-row .btn-primary, .btn-row .btn-secondary { width: 100%; }
+    .test-result { margin-top: 12px; padding: 12px; border-radius: 8px; font-size: 13px; }
+    .test-result.success { background: #dcfce7; color: #166534; border: 1px solid rgba(22,163,74,0.2); }
+    .test-result.failure { background: #fef2f2; color: #991b1b; border: 1px solid rgba(220,38,38,0.2); }
+    .divider { border: none; border-top: 1px solid var(--border); margin: 28px 0; }
+    .docker-hint { background: #fef9c3; border: 1px solid rgba(217,119,6,0.2); border-radius: 8px; padding: 12px; font-size: 12px; color: #854d0e; margin-bottom: 16px; line-height: 1.5; }
+    .docker-hint code { background: rgba(0,0,0,0.05); padding: 2px 5px; border-radius: 3px; font-family: var(--mono); font-size: 11px; }
+</style>
+
+<div class="setup-container">
+    <h1>Welcome to GateSQL</h1>
+    <p class="subtitle">Secure database access for AI agents. Connect your PostgreSQL to get started.</p>
+
+    <div class="setup-section">
+        <h2>Your API Key</h2>
+        <div class="api-key-box">
+            <code id="api-key">@Model.ApiKey</code>
+            <button onclick="navigator.clipboard.writeText(document.getElementById('api-key').textContent)">Copy</button>
+        </div>
+        <p class="api-key-hint">Use this key to create agent sessions via the API. Save it — you'll need it to log in.</p>
+    </div>
+
+    <hr class="divider">
+
+    <div class="setup-section">
+        <h2>Connect Your Database</h2>
+
+        @if (Model.IsDocker)
+        {
+            <div class="docker-hint">
+                Running in Docker — use <code>host.docker.internal</code> to connect to PostgreSQL on your host machine.
+                On Linux, add <code>--add-host=host.docker.internal:host-gateway</code> to your docker run command.
+            </div>
+        }
+
+        <form id="setup-form" method="post" action="/dashboard/setup">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Host</label>
+                    <input type="text" name="host" value="@Model.Host" placeholder="localhost">
+                </div>
+                <div class="form-group">
+                    <label>Port</label>
+                    <input type="number" name="port" value="@Model.Port" placeholder="5432">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Database</label>
+                <input type="text" name="database" value="@Model.Database" placeholder="postgres">
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Username</label>
+                    <input type="text" name="username" value="@Model.Username" placeholder="postgres">
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" name="password" value="@Model.Password">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>SSL Mode</label>
+                <select name="sslMode">
+                    <option value="disable" selected="@(Model.SslMode == "disable")">Disable</option>
+                    <option value="prefer" selected="@(Model.SslMode == "prefer")">Prefer</option>
+                    <option value="require" selected="@(Model.SslMode == "require")">Require</option>
+                    <option value="verifyCa" selected="@(Model.SslMode == "verifyCa")">Verify CA</option>
+                    <option value="verifyFull" selected="@(Model.SslMode == "verifyFull")">Verify Full</option>
+                </select>
+            </div>
+
+            <div id="test-result">
+                @if (Model.TestResult != null)
+                {
+                    <div class="test-result @(Model.TestSuccess ? "success" : "failure")">@Model.TestResult</div>
+                }
+            </div>
+
+            <div class="btn-row">
+                <button type="button" class="btn-secondary"
+                    hx-post="/dashboard/setup/test"
+                    hx-include="#setup-form"
+                    hx-target="#test-result"
+                    hx-swap="innerHTML">
+                    Test Connection
+                </button>
+                <button type="submit" class="btn-primary">Save &amp; Continue</button>
+            </div>
+        </form>
+    </div>
+</div>

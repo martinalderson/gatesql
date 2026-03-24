@@ -1,0 +1,32 @@
+{
+  "proxy": {
+    "listenPort": 15432,
+    "listenHost": "0.0.0.0",
+    "tlsCertPath": null,
+    "tlsKeyPath": null
+  },
+  "upstream": {
+    "host": "localhost",
+    "port": 5432,
+    "database": "postgres",
+    "username": "postgres",
+    "password": "postgres",
+    "maxConnections": 20,
+    "sslMode": "disable"
+  },
+  "auth": {
+    "hardCapMinutes": 480,
+    "idleTimeoutMinutes": 15,
+    "signingKeyPath": "keys/signing.key",
+    "parentApiKeys": [
+      { "name": "dev-orchestrator", "key": "pk_dev_123" }
+    ]
+  },
+  "logging": {
+    "directory": "logs"
+  },
+  "dashboard": {
+    "enabled": true,
+    "port": 8080
+  }
+}

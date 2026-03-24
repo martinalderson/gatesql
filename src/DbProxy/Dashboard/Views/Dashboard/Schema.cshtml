@@ -1,0 +1,112 @@
+@using DbProxy.Query
+@using DbProxy.Data
+@{
+    Layout = "_Layout";
+    var tables = (List<TableSchema>)ViewBag.Tables;
+    var annotations = (Dictionary<string, SchemaAnnotationEntity>)ViewBag.Annotations;
+    var error = (string?)ViewBag.Error;
+}
+
+<div class="header">
+    <a href="/dashboard" class="logo">Gate<span class="logo-badge">SQL</span></a>
+    <a href="/dashboard" class="nav-link">Dashboard</a>
+    <a href="/dashboard/schema" class="nav-link active">Schema</a>
+    <div class="spacer"></div>
+    <form method="post" action="/dashboard/logout" style="margin:0;">
+        <button type="submit" class="logout">Logout</button>
+    </form>
+</div>
+
+<div class="schema-container">
+    <div class="schema-intro">
+        <h1>Schema</h1>
+        <p>Auto-discovered tables from your database. Add descriptions, example queries, and notes to give AI agents context about your data.</p>
+        <div class="schema-api-hint">
+            <code>curl http://localhost:8080/api/schema -H "X-Api-Key: ..."</code>
+            <span>Returns markdown with your annotations, ready for agent prompts.</span>
+        </div>
+    </div>
+
+    @if (error != null)
+    {
+        <div class="schema-error">@error</div>
+    }
+
+    @if (tables.Count == 0 && error == null)
+    {
+        <div class="empty">No tables found in the upstream database.</div>
+    }
+
+    @foreach (var table in tables)
+    {
+        var fullName = $"{table.Schema}.{table.Name}";
+        annotations.TryGetValue(fullName, out var ann);
+        var formId = $"form-{fullName.Replace(".", "-")}";
+        var hasAnnotations = ann != null && (!string.IsNullOrWhiteSpace(ann.Description) || !string.IsNullOrWhiteSpace(ann.ExampleQueries) || !string.IsNullOrWhiteSpace(ann.Notes));
+        <details class="table-card">
+            <summary>
+                <strong>@table.Name</strong>
+                <span class="table-meta">@table.Schema</span>
+                <span class="table-meta">~@FormatRows(table.EstimatedRows) rows</span>
+                <span class="table-meta">@table.Columns.Count columns</span>
+                @if (hasAnnotations)
+                {
+                    <span class="badge badge-green" style="font-size: 10px; margin-left: 4px;">annotated</span>
+                }
+            </summary>
+
+            <div class="table-card-body">
+                <table class="columns-table">
+                    <thead>
+                        <tr><th>Column</th><th>Type</th><th>Nullable</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var col in table.Columns)
+                        {
+                            <tr>
+                                <td>@col.Name</td>
+                                <td style="color: var(--fg-muted);">@col.Type</td>
+                                <td style="color: var(--fg-dim);">@(col.Nullable ? "yes" : "no")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+
+                <div class="annotation-form">
+                    <form id="@formId">
+                        <input type="hidden" name="tableName" value="@fullName">
+                        <div class="form-group">
+                            <label>Description</label>
+                            <input type="text" name="description" value="@(ann?.Description)" placeholder="What is this table for?">
+                        </div>
+                        <div class="form-group">
+                            <label>Example Queries</label>
+                            <textarea name="exampleQueries" rows="3" style="font-family: var(--mono); font-size: 12px;" placeholder="One query per line">@(ann?.ExampleQueries)</textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Notes</label>
+                            <textarea name="notes" rows="2" placeholder="Tips, gotchas, join patterns...">@(ann?.Notes)</textarea>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <button type="button" class="btn-secondary" style="padding: 6px 14px; font-size: 12px;"
+                                hx-post="/dashboard/schema/update"
+                                hx-include="#@formId"
+                                hx-target="#save-result-@fullName.Replace(".", "-")"
+                                hx-swap="innerHTML">Save</button>
+                            <span id="save-result-@fullName.Replace(".", "-")" style="font-size: 12px;"></span>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </details>
+    }
+</div>
+
+@functions {
+    string FormatRows(long count) => count switch
+    {
+        >= 1_000_000 => $"{count / 1_000_000.0:0.#}M",
+        >= 1_000 => $"{count / 1_000.0:0.#}k",
+        _ => count.ToString(),
+    };
+}

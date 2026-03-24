@@ -1,0 +1,27 @@
+FROM gatesql/gatesql:latest AS base
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
+WORKDIR /app
+
+# Install PostgreSQL
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends postgresql && \
+    rm -rf /var/lib/apt/lists/*
+
+# Create directories
+RUN mkdir -p /app/keys /app/logs /app/data /var/lib/postgresql/data /var/log && \
+    chown postgres:postgres /var/lib/postgresql/data && \
+    touch /var/log/postgresql.log && chown postgres:postgres /var/log/postgresql.log
+
+# Copy GateSQL build from the main image (no rebuild needed)
+COPY --from=base /app .
+COPY demo/demo-config.json /app/config.json
+COPY demo/demo-store.sql /app/demo-store.sql
+COPY demo/demo-entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+ENV GATESQL_DEMO=true
+
+EXPOSE 15432 8080
+
+ENTRYPOINT ["/app/entrypoint.sh"]

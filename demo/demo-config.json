@@ -1,0 +1,37 @@
+{
+  "proxy": {
+    "listenPort": 15432,
+    "listenHost": "0.0.0.0"
+  },
+  "upstream": {
+    "host": "localhost",
+    "port": 5432,
+    "database": "demo",
+    "username": "postgres",
+    "password": "",
+    "maxConnections": 20,
+    "sslMode": "disable"
+  },
+  "auth": {
+    "hardCapMinutes": 480,
+    "idleTimeoutMinutes": 15,
+    "signingKeyPath": "/app/keys/signing.key",
+    "parentApiKeys": [
+      {
+        "name": "demo",
+        "key": "pk_demo_key"
+      }
+    ]
+  },
+  "logging": {
+    "directory": "/app/logs"
+  },
+  "dashboard": {
+    "enabled": true,
+    "port": 8080
+  },
+  "storage": {
+    "provider": "sqlite",
+    "connectionString": "Data Source=/app/data/gatesql.db"
+  }
+}
