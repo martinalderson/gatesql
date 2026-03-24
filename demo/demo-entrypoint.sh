@@ -24,5 +24,15 @@ if ! su -c "$PGBIN/psql -lqt" postgres | grep -qw demo; then
     su -c "$PGBIN/psql -q -d demo -f /app/demo-store.sql" postgres > /dev/null
 fi
 
-# Start GateSQL proxy (foreground)
-exec dotnet DbProxy.dll /app/config.json
+# Trap signals for clean shutdown of both processes
+cleanup() {
+    kill "$DOTNET_PID" 2>/dev/null
+    wait "$DOTNET_PID" 2>/dev/null
+    su -c "$PGBIN/pg_ctl stop -D $PGDATA -m fast" postgres 2>/dev/null
+}
+trap cleanup SIGTERM SIGINT EXIT
+
+# Start GateSQL proxy (background, then wait)
+dotnet DbProxy.dll /app/config.json &
+DOTNET_PID=$!
+wait "$DOTNET_PID"

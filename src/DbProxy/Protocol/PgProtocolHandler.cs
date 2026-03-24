@@ -22,6 +22,8 @@ public class PgProtocolHandler : IDisposable
     private readonly X509Certificate2? _upstreamCaCert;
     private readonly X509Certificate2? _upstreamClientCert;
     private readonly ILogger<PgProtocolHandler> _logger;
+    private readonly List<Task> _clientTasks = new();
+    private readonly object _clientTasksLock = new();
     private CancellationTokenSource? _cts;
 
     public PgProtocolHandler(
@@ -59,12 +61,28 @@ public class PgProtocolHandler : IDisposable
             try
             {
                 var client = await _listener.AcceptTcpClientAsync(_cts.Token);
-                _ = HandleClientAsync(client, _cts.Token);
+                var task = HandleClientAsync(client, _cts.Token);
+                lock (_clientTasksLock)
+                {
+                    _clientTasks.Add(task);
+                    if (_clientTasks.Count > 100)
+                        _clientTasks.RemoveAll(t => t.IsCompleted);
+                }
             }
             catch (OperationCanceledException)
             {
                 break;
             }
+        }
+
+        // Wait for active client connections to finish (up to 3 seconds)
+        Task[] activeTasks;
+        lock (_clientTasksLock)
+            activeTasks = _clientTasks.Where(t => !t.IsCompleted).ToArray();
+        if (activeTasks.Length > 0)
+        {
+            _logger.LogInformation("Waiting for {Count} active connections to close", activeTasks.Length);
+            await Task.WhenAny(Task.WhenAll(activeTasks), Task.Delay(3000));
         }
     }
 

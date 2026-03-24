@@ -208,6 +208,11 @@ Console.WriteLine();
 // Run web host (blocks until shutdown)
 await app.RunAsync(cts.Token);
 
+// Wait for proxy listener to finish gracefully
+cts.Cancel();
+try { await proxyTask.WaitAsync(TimeSpan.FromSeconds(5)); }
+catch (TimeoutException) { }
+
 // Cleanup
 pgHandler.Dispose();
 sessionManager.Dispose();
