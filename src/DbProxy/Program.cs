@@ -168,6 +168,7 @@ var pgHandler = new PgProtocolHandler(config, jwtAuth, sessionManager, queryLogg
 
 var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
+app.Lifetime.ApplicationStopping.Register(() => cts.Cancel());
 
 var proxyTask = Task.Run(() => pgHandler.StartAsync(cts.Token));
 
