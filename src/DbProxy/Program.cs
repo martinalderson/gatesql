@@ -161,7 +161,7 @@ if (config.Dashboard.Enabled)
 
 // Start PG proxy in background
 var pgHandler = new PgProtocolHandler(config, jwtAuth, sessionManager, queryLogger,
-    app.Services.GetRequiredService<ILogger<PgProtocolHandler>>(), schemaIntrospector);
+    app.Services.GetRequiredService<ILogger<PgProtocolHandler>>());
 
 var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
