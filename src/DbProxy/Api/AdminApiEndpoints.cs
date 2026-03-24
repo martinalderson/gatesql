@@ -7,7 +7,7 @@ namespace DbProxy.Api;
 
 public static class AdminApiEndpoints
 {
-    public static void MapAdminApi(this WebApplication app, ProxyConfig config, JwtAuthenticator jwtAuth, SessionManager sessionManager, QueryLogger queryLogger)
+    public static void MapAdminApi(this WebApplication app, ProxyConfig config, JwtAuthenticator jwtAuth, SessionManager sessionManager, QueryLogger queryLogger, SchemaIntrospector? schemaIntrospector = null)
     {
         var api = app.MapGroup("/api");
 
@@ -100,7 +100,67 @@ public static class AdminApiEndpoints
             var queries = queryLogger.GetRecentQueries(count ?? 100);
             return Results.Json(queries);
         });
+
+        api.MapGet("/schema", async (HttpContext ctx) =>
+        {
+            var apiKey = ctx.Request.Headers["X-Api-Key"].FirstOrDefault();
+            if (string.IsNullOrEmpty(apiKey) || !config.Auth.ParentApiKeys.Any(k => k.Key == apiKey))
+                return Results.Json(new { error = "Invalid API key" }, statusCode: 401);
+
+            if (schemaIntrospector == null)
+                return Results.Json(new { error = "Schema introspection not available" }, statusCode: 503);
+
+            try
+            {
+                var markdown = await schemaIntrospector.RenderMarkdownAsync();
+                return Results.Text(markdown, "text/plain");
+            }
+            catch (Exception ex)
+            {
+                return Results.Json(new { error = $"Schema introspection failed: {ex.Message}" }, statusCode: 502);
+            }
+        });
+
+        api.MapGet("/schema/{tableName}/annotations", async (string tableName, HttpContext ctx) =>
+        {
+            var apiKey = ctx.Request.Headers["X-Api-Key"].FirstOrDefault();
+            if (string.IsNullOrEmpty(apiKey) || !config.Auth.ParentApiKeys.Any(k => k.Key == apiKey))
+                return Results.Json(new { error = "Invalid API key" }, statusCode: 401);
+
+            if (schemaIntrospector == null)
+                return Results.Json(new { error = "Schema introspection not available" }, statusCode: 503);
+
+            var annotations = await schemaIntrospector.GetAnnotationsAsync();
+            if (annotations.TryGetValue(tableName, out var ann))
+                return Results.Json(new { ann.Description, ann.ExampleQueries, ann.Notes });
+            return Results.Json(new { Description = (string?)null, ExampleQueries = (string?)null, Notes = (string?)null });
+        });
+
+        api.MapPut("/schema/{tableName}/annotations", async (string tableName, SchemaAnnotationRequest request, HttpContext ctx) =>
+        {
+            var apiKey = ctx.Request.Headers["X-Api-Key"].FirstOrDefault();
+            if (string.IsNullOrEmpty(apiKey) || !config.Auth.ParentApiKeys.Any(k => k.Key == apiKey))
+                return Results.Json(new { error = "Invalid API key" }, statusCode: 401);
+
+            if (schemaIntrospector == null)
+                return Results.Json(new { error = "Schema introspection not available" }, statusCode: 503);
+
+            await schemaIntrospector.SaveAnnotationAsync(tableName, request.Description, request.ExampleQueries, request.Notes);
+            return Results.Ok(new { message = "Annotations saved" });
+        });
     }
+}
+
+public class SchemaAnnotationRequest
+{
+    [JsonPropertyName("description")]
+    public string? Description { get; set; }
+
+    [JsonPropertyName("exampleQueries")]
+    public string? ExampleQueries { get; set; }
+
+    [JsonPropertyName("notes")]
+    public string? Notes { get; set; }
 }
 
 public class CreateSessionRequest

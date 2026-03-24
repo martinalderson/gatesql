@@ -87,6 +87,7 @@ public class DashboardFixture : IAsyncLifetime
         builder.Services.AddSingleton(_jwtAuth);
         builder.Services.AddSingleton(_sessionManager);
         builder.Services.AddSingleton(_queryLogger);
+        builder.Services.AddSingleton(new DbProxy.Query.SchemaIntrospector(Config));
         builder.Services.AddSingleton(new SetupState { SetupRequired = false });
 
         // Build a temporary ServiceProvider to create SettingsStore
