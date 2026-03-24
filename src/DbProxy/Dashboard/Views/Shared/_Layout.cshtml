@@ -97,8 +97,8 @@
         .session-form { background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: 10px; padding: 24px; max-width: 560px; margin-bottom: 32px; }
         .session-form h3 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
         .form-subtitle { font-size: 13px; color: var(--fg-muted); margin-bottom: 20px; }
-        .toggle-label { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: var(--fg); }
-        .toggle-label input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
+        label.toggle-label { display: flex !important; align-items: center; gap: 8px; cursor: pointer; font-size: 13px !important; color: var(--fg) !important; margin-bottom: 0 !important; }
+        label.toggle-label input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
 
         /* Credential card */
         .credential-card { background: var(--bg-card); border: 1px solid rgba(22,163,74,0.3); border-radius: 10px; padding: 24px; max-width: 560px; margin-bottom: 32px; }
@@ -118,6 +118,29 @@
         .login-container button { width: 100%; background: var(--accent); color: #fff; border: none; padding: 10px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; transition: background 0.15s; }
         .login-container button:hover { background: var(--accent-hover); }
         .login-container .error { color: var(--red); font-size: 13px; margin-bottom: 12px; }
+
+        /* Schema page */
+        .schema-container { max-width: 900px; margin: 0 auto; padding: 32px; }
+        .schema-intro { margin-bottom: 32px; }
+        .schema-intro h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+        .schema-intro > p { font-size: 13px; color: var(--fg-muted); margin-bottom: 16px; }
+        .schema-api-hint { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        .schema-api-hint code { font-family: var(--mono); font-size: 12px; color: var(--fg); background: var(--bg-card); padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); }
+        .schema-api-hint span { font-size: 12px; color: var(--fg-muted); }
+        .schema-error { background: #fef2f2; border: 1px solid rgba(220,38,38,0.2); border-radius: 8px; padding: 16px; color: #991b1b; font-size: 13px; margin-bottom: 24px; }
+        details.table-card { background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: 10px; margin-bottom: 12px; }
+        details.table-card summary { padding: 14px 20px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 14px; list-style: none; }
+        details.table-card summary::-webkit-details-marker { display: none; }
+        details.table-card summary::before { content: '\25B6'; font-size: 9px; color: var(--fg-dim); transition: transform 0.15s; }
+        details.table-card[open] summary::before { transform: rotate(90deg); }
+        details.table-card summary strong { font-weight: 600; }
+        .table-meta { font-size: 12px; color: var(--fg-dim); }
+        .table-card-body { padding: 0 20px 20px; }
+        .columns-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 16px; }
+        .columns-table th { text-align: left; padding: 4px 8px; color: var(--fg-muted); font-weight: 500; border-bottom: 1px solid var(--border-strong); }
+        .columns-table td { padding: 4px 8px; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 11px; }
+        .annotation-form { border-top: 1px solid var(--border); padding-top: 16px; }
+        .annotation-form textarea { resize: vertical; min-height: 48px; }
     </style>
     <script src="/htmx.min.js"></script>
     <script src="/sse.js"></script>

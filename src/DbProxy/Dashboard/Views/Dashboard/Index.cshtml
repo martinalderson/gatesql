@@ -18,7 +18,7 @@
         @await Html.PartialAsync("_Stats", Model)
     </div>
 
-    <div id="session-form-area">
+    <div id="session-form-area" style="display: flex; justify-content: center;">
         @if (Model.ActiveSessions.Count == 0)
         {
             @await Html.PartialAsync("_CreateSessionForm")

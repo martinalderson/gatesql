@@ -7,52 +7,34 @@
     var error = (string?)ViewBag.Error;
 }
 
-<style>
-    .schema-container { max-width: 900px; margin: 0 auto; padding: 32px; }
-    .schema-container h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
-    .schema-subtitle { font-size: 13px; color: #737373; margin-bottom: 32px; }
-    .table-card { background: #111; border: 1px solid #1a1a1a; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
-    .table-card h2 { font-size: 15px; font-weight: 600; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
-    .table-card .schema-name { font-size: 11px; color: #525252; font-weight: 400; }
-    .table-card .row-estimate { font-size: 12px; color: #737373; margin-bottom: 12px; }
-    .columns-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 16px; }
-    .columns-table th { text-align: left; padding: 4px 8px; color: #525252; font-weight: 500; border-bottom: 1px solid #1a1a1a; }
-    .columns-table td { padding: 4px 8px; border-bottom: 1px solid #0a0a0a; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 11px; }
-    .annotation-section { border-top: 1px solid #1a1a1a; padding-top: 12px; margin-top: 12px; }
-    .annotation-section label { display: block; font-size: 11px; color: #737373; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
-    .annotation-section input, .annotation-section textarea { width: 100%; background: #0a0a0a; border: 1px solid #1a1a1a; color: #e5e5e5; padding: 8px 10px; border-radius: 4px; font-size: 13px; font-family: inherit; margin-bottom: 10px; resize: vertical; }
-    .annotation-section input:focus, .annotation-section textarea:focus { outline: none; border-color: #333; }
-    .annotation-section textarea { min-height: 60px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; }
-    .btn-save { background: #1a1a1a; color: #a3a3a3; border: 1px solid #333; padding: 5px 14px; border-radius: 4px; font-size: 12px; cursor: pointer; }
-    .btn-save:hover { color: #e5e5e5; border-color: #525252; }
-    .save-result { display: inline-block; margin-left: 8px; }
-    .error-banner { background: #2a0a0a; border: 1px solid #7f1d1d; border-radius: 8px; padding: 16px; color: #f87171; font-size: 13px; margin-bottom: 24px; }
-</style>
-
 <div class="header">
-    <div class="dot"></div>
-    <h1>GateSQL</h1>
+    <a href="/dashboard" class="logo">Gate<span class="logo-badge">SQL</span></a>
     <a href="/dashboard" class="nav-link">Dashboard</a>
-    <a href="/dashboard/schema" class="nav-link" style="color: #e5e5e5;">Schema</a>
+    <a href="/dashboard/schema" class="nav-link active">Schema</a>
+    <div class="spacer"></div>
     <form method="post" action="/dashboard/logout" style="margin:0;">
         <button type="submit" class="logout">Logout</button>
     </form>
 </div>
 
 <div class="schema-container">
-    <h1>Schema</h1>
-    <p class="schema-subtitle">Auto-discovered tables from your database. Add descriptions, example queries, and notes for AI agents.</p>
+    <div class="schema-intro">
+        <h1>Schema</h1>
+        <p>Auto-discovered tables from your database. Add descriptions, example queries, and notes to give AI agents context about your data.</p>
+        <div class="schema-api-hint">
+            <code>curl http://localhost:8080/api/schema -H "X-Api-Key: ..."</code>
+            <span>Returns markdown with your annotations, ready for agent prompts.</span>
+        </div>
+    </div>
 
     @if (error != null)
     {
-        <div class="error-banner">@error</div>
+        <div class="schema-error">@error</div>
     }
 
     @if (tables.Count == 0 && error == null)
     {
-        <div style="text-align: center; padding: 48px; color: #525252; font-size: 13px;">
-            No tables found in the upstream database.
-        </div>
+        <div class="empty">No tables found in the upstream database.</div>
     }
 
     @foreach (var table in tables)
@@ -60,44 +42,63 @@
         var fullName = $"{table.Schema}.{table.Name}";
         annotations.TryGetValue(fullName, out var ann);
         var formId = $"form-{fullName.Replace(".", "-")}";
-        <div class="table-card">
-            <h2>@table.Name <span class="schema-name">@table.Schema</span></h2>
-            <div class="row-estimate">~@FormatRows(table.EstimatedRows) rows</div>
+        var hasAnnotations = ann != null && (!string.IsNullOrWhiteSpace(ann.Description) || !string.IsNullOrWhiteSpace(ann.ExampleQueries) || !string.IsNullOrWhiteSpace(ann.Notes));
+        <details class="table-card">
+            <summary>
+                <strong>@table.Name</strong>
+                <span class="table-meta">@table.Schema</span>
+                <span class="table-meta">~@FormatRows(table.EstimatedRows) rows</span>
+                <span class="table-meta">@table.Columns.Count columns</span>
+                @if (hasAnnotations)
+                {
+                    <span class="badge badge-green" style="font-size: 10px; margin-left: 4px;">annotated</span>
+                }
+            </summary>
 
-            <table class="columns-table">
-                <thead>
-                    <tr><th>Column</th><th>Type</th><th>Nullable</th></tr>
-                </thead>
-                <tbody>
-                    @foreach (var col in table.Columns)
-                    {
-                        <tr>
-                            <td>@col.Name</td>
-                            <td style="color: #737373;">@col.Type</td>
-                            <td style="color: #525252;">@(col.Nullable ? "yes" : "no")</td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
+            <div class="table-card-body">
+                <table class="columns-table">
+                    <thead>
+                        <tr><th>Column</th><th>Type</th><th>Nullable</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var col in table.Columns)
+                        {
+                            <tr>
+                                <td>@col.Name</td>
+                                <td style="color: var(--fg-muted);">@col.Type</td>
+                                <td style="color: var(--fg-dim);">@(col.Nullable ? "yes" : "no")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
 
-            <div class="annotation-section">
-                <form id="@formId">
-                    <input type="hidden" name="tableName" value="@fullName">
-                    <label>Description</label>
-                    <input type="text" name="description" value="@(ann?.Description)" placeholder="What is this table for?">
-                    <label>Example Queries</label>
-                    <textarea name="exampleQueries" placeholder="One query per line">@(ann?.ExampleQueries)</textarea>
-                    <label>Notes</label>
-                    <textarea name="notes" placeholder="Tips, gotchas, join patterns...">@(ann?.Notes)</textarea>
-                    <button type="button" class="btn-save"
-                        hx-post="/dashboard/schema/update"
-                        hx-include="#@formId"
-                        hx-target="#save-result-@fullName.Replace(".", "-")"
-                        hx-swap="innerHTML">Save</button>
-                    <span class="save-result" id="save-result-@fullName.Replace(".", "-")"></span>
-                </form>
+                <div class="annotation-form">
+                    <form id="@formId">
+                        <input type="hidden" name="tableName" value="@fullName">
+                        <div class="form-group">
+                            <label>Description</label>
+                            <input type="text" name="description" value="@(ann?.Description)" placeholder="What is this table for?">
+                        </div>
+                        <div class="form-group">
+                            <label>Example Queries</label>
+                            <textarea name="exampleQueries" rows="3" style="font-family: var(--mono); font-size: 12px;" placeholder="One query per line">@(ann?.ExampleQueries)</textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Notes</label>
+                            <textarea name="notes" rows="2" placeholder="Tips, gotchas, join patterns...">@(ann?.Notes)</textarea>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <button type="button" class="btn-secondary" style="padding: 6px 14px; font-size: 12px;"
+                                hx-post="/dashboard/schema/update"
+                                hx-include="#@formId"
+                                hx-target="#save-result-@fullName.Replace(".", "-")"
+                                hx-swap="innerHTML">Save</button>
+                            <span id="save-result-@fullName.Replace(".", "-")" style="font-size: 12px;"></span>
+                        </div>
+                    </form>
+                </div>
             </div>
-        </div>
+        </details>
     }
 </div>
 
