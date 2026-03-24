@@ -18,8 +18,9 @@ public class DashboardController : Controller
     private readonly ProxyConfig _config;
     private readonly SettingsStore _settingsStore;
     private readonly SetupState _setupState;
+    private readonly SchemaIntrospector _schemaIntrospector;
 
-    public DashboardController(SessionManager sessionManager, JwtAuthenticator jwtAuth, QueryLogger queryLogger, ProxyConfig config, SettingsStore settingsStore, SetupState setupState)
+    public DashboardController(SessionManager sessionManager, JwtAuthenticator jwtAuth, QueryLogger queryLogger, ProxyConfig config, SettingsStore settingsStore, SetupState setupState, SchemaIntrospector schemaIntrospector)
     {
         _sessionManager = sessionManager;
         _jwtAuth = jwtAuth;
@@ -27,6 +28,7 @@ public class DashboardController : Controller
         _config = config;
         _settingsStore = settingsStore;
         _setupState = setupState;
+        _schemaIntrospector = schemaIntrospector;
     }
 
     public IActionResult Index()
@@ -182,6 +184,33 @@ public class DashboardController : Controller
         _sessionManager.RevokeSession(sessionId);
         var model = BuildViewModel();
         return PartialView("_SessionsTable", model);
+    }
+
+    [HttpGet("/dashboard/schema")]
+    public async Task<IActionResult> Schema()
+    {
+        try
+        {
+            var tables = await _schemaIntrospector.GetSchemaAsync();
+            var annotations = await _schemaIntrospector.GetAnnotationsAsync();
+            ViewBag.Tables = tables;
+            ViewBag.Annotations = annotations;
+            ViewBag.Error = null;
+        }
+        catch (Exception ex)
+        {
+            ViewBag.Tables = new List<TableSchema>();
+            ViewBag.Annotations = new Dictionary<string, DbProxy.Data.SchemaAnnotationEntity>();
+            ViewBag.Error = $"Could not connect to upstream database: {ex.Message}";
+        }
+        return View();
+    }
+
+    [HttpPost("/dashboard/schema/update")]
+    public async Task<IActionResult> SchemaUpdate(string tableName, string? description, string? exampleQueries, string? notes)
+    {
+        await _schemaIntrospector.SaveAnnotationAsync(tableName, description, exampleQueries, notes);
+        return Content("<div class=\"test-result success\">Saved</div>", "text/html");
     }
 
     [HttpGet("/dashboard/events")]

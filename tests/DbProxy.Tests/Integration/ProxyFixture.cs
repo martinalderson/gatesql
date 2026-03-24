@@ -2,9 +2,10 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using DbProxy.Auth;
 using DbProxy.Configuration;
+using DbProxy.Data;
 using DbProxy.Protocol;
 using DbProxy.Query;
-using Microsoft.Extensions.Logging;
+using Microsoft.EntityFrameworkCore;
 using Testcontainers.PostgreSql;
 
 namespace DbProxy.Tests.Integration;
@@ -77,8 +78,20 @@ public class ProxyFixture : IAsyncLifetime
         builder.WebHost.UseUrls($"http://127.0.0.1:{ApiPort}");
         builder.Logging.SetMinimumLevel(LogLevel.Warning);
 
+        // SQLite for schema annotations
+        var dbPath = Path.Combine(_tempDir, "test.db");
+        builder.Services.AddDbContextFactory<GateSqlDbContext>(options =>
+            options.UseSqlite($"Data Source={dbPath}"));
+
         _webApp = builder.Build();
-        DbProxy.Api.AdminApiEndpoints.MapAdminApi(_webApp, Config, _jwtAuth, _sessionManager, _queryLogger);
+
+        // Initialize DB
+        var dbFactory = _webApp.Services.GetRequiredService<IDbContextFactory<GateSqlDbContext>>();
+        using (var db = dbFactory.CreateDbContext())
+            db.Database.EnsureCreated();
+
+        var schemaIntrospector = new SchemaIntrospector(Config, dbFactory);
+        DbProxy.Api.AdminApiEndpoints.MapAdminApi(_webApp, Config, _jwtAuth, _sessionManager, _queryLogger, schemaIntrospector);
 
         _cts = new CancellationTokenSource();
 
