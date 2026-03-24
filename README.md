@@ -352,7 +352,7 @@ Every query sent through GateSQL must include a purpose comment that explains *w
 SELECT product_name, quantity FROM inventory WHERE quantity < 10;
 ```
 
-This creates a full audit trail of not just *what* an agent did, but *why*. Internal driver queries (`pg_catalog` lookups, `SET`, `BEGIN`, `COMMIT`, etc.) are automatically exempt.
+This creates a full audit trail of not just *what* an agent did, but *why*. Internal driver queries are automatically exempt — this includes session commands (`SET`, `BEGIN`, `COMMIT`, `ROLLBACK`, `DISCARD`, `SHOW`) and pure catalog metadata queries (SELECTs that only reference `pg_catalog` or `information_schema` tables). Exempt queries don't count against the query budget and are logged with an "Exempt" badge in the dashboard for auditability.
 
 The purpose is logged alongside the query text, agent ID, session ID, timing, and row count in the JSON-lines query log.
 
@@ -360,12 +360,12 @@ The purpose is logged alongside the query text, agent ID, session ID, timing, an
 
 GateSQL includes a web dashboard at `http://localhost:8080` that shows:
 
-- Active and expired sessions
-- Live query feed with purposes
+- **Session creation form** — create sessions directly from the UI, no curl needed
+- Active and expired sessions with live status updates
+- Live query feed with purposes and exempt query badges
 - Governance rejections (blocked queries, table violations, etc.)
-- Session details with query history
 
-> **Note:** The dashboard has no authentication. Restrict access to port 8080 via firewall rules or network policy.
+> **Note:** The dashboard has no authentication beyond the API key. Restrict access to port 8080 via firewall rules or network policy.
 
 ## Docker
 

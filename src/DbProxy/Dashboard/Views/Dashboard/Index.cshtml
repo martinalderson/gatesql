@@ -4,8 +4,10 @@
 }
 
 <div class="header">
-    <div class="dot"></div>
-    <h1>GateSQL</h1>
+    <a href="/dashboard" class="logo">Gate<span class="logo-badge">SQL</span></a>
+    <a href="/dashboard" class="nav-link active">Dashboard</a>
+    <a href="/dashboard/schema" class="nav-link">Schema</a>
+    <div class="spacer"></div>
     <form method="post" action="/dashboard/logout" style="margin:0;">
         <button type="submit" class="logout">Logout</button>
     </form>

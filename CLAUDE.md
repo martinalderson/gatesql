@@ -18,7 +18,7 @@ dotnet run --project src/DbProxy -- /home/martin/source/db-proxy/config.json
 ## Test
 
 ```bash
-dotnet test                    # 97 tests: 48 unit + 49 integration (uses Testcontainers — requires Docker)
+dotnet test                    # ~136 tests: unit + integration (uses Testcontainers — requires Docker)
 ./scripts/restart-proxy.sh    # restart proxy (kills existing, starts fresh)
 ./scripts/benchmark.sh        # pgbench comparison: proxy vs direct
 ```
@@ -38,7 +38,7 @@ Browser ──HTTP──► MVC Dashboard (port 8080)
 ### Key design decisions
 - **Auth model**: Parent-delegated JWTs. The entity spawning the agent calls `POST /api/sessions` to get a short-lived JWT. Agent uses it as `PGPASSWORD`. Agent never holds long-lived credentials.
 - **Session expiry**: JWT `exp` = hard cap (default 8h). Proxy-side idle timeout with sliding window (default 15min). Both enforced.
-- **Purpose enforcement**: All queries must include `/* <agent_purpose>reason</agent_purpose> */`. Queries without it are rejected with an error message. Internal driver queries (pg_catalog, SET, BEGIN, etc.) are exempt.
+- **Purpose enforcement**: All queries must include `/* <agent_purpose>reason</agent_purpose> */`. Queries without it are rejected with an error message. Session commands (SET, BEGIN, COMMIT, ROLLBACK, DISCARD, SHOW) and pure catalog SELECTs (pg_catalog/information_schema only) are exempt. Exempt queries are logged with a reason and don't count against the query budget.
 - **Query governance**: AST-based query analysis via `libpg_query` (PostgreSQL's actual parser). Supports read-only sessions, dangerous query detection (DROP/TRUNCATE/DELETE without WHERE), and per-session table allowlists.
 - **Upstream auth**: Proxy handles MD5 and SCRAM-SHA-256 password auth with upstream PG.
 - **Upstream SSL/TLS**: Supports sslmode disable/prefer/require/verify-ca/verify-full for upstream connections.
@@ -56,10 +56,11 @@ Browser ──HTTP──► MVC Dashboard (port 8080)
 src/DbProxy/
   Protocol/          # PG wire protocol (reader, writer, handler, message types)
   Auth/              # JWT signing/validation, session manager
-  Query/             # SQL comment parser, query logger, budget tracking, AST-based query analyzer
-  Api/               # Admin API endpoints (session CRUD)
-  Dashboard/         # MVC dashboard (Controllers, Views, Models)
+  Query/             # SQL comment parser, query logger, budget tracking, AST-based query analyzer, schema introspection
+  Api/               # Admin API endpoints (session CRUD, schema discovery)
+  Dashboard/         # MVC dashboard (Controllers, Views, Models) — session creation, schema editor
   Configuration/     # Config model (maps to config.json)
+  Data/              # EF Core entities, SQLite context, settings store
 config.json          # Runtime config (ports, upstream, auth keys, timeouts)
 bench/               # pgbench scripts with purpose comments baked in
 scripts/             # restart-proxy.sh, benchmark.sh
