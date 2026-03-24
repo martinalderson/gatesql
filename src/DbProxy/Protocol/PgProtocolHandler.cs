@@ -212,6 +212,7 @@ public class PgProtocolHandler : IDisposable
         // Track current query state for logging
         string? currentQuery = null;
         Dictionary<string, string>? currentContext = null;
+        string? currentExemptionReason = null;
         var sw = new Stopwatch();
         int rowCount = 0;
         bool errorOccurred = false;
@@ -240,10 +241,12 @@ public class PgProtocolHandler : IDisposable
                         RowCount = rowCount,
                         DurationMs = sw.ElapsedMilliseconds,
                         Success = !errorOccurred,
+                        ExemptionReason = currentExemptionReason,
                     });
                 }
                 currentQuery = null;
                 currentContext = null;
+                currentExemptionReason = null;
                 rowCount = 0;
                 errorOccurred = false;
             },
@@ -308,8 +311,11 @@ public class PgProtocolHandler : IDisposable
 
                     if (queryText != null)
                     {
-                        if (!SqlCommentParser.IsBudgetCheck(queryText)
-                            && !IsInternalQuery(queryText)
+                        var isBudgetCheck = SqlCommentParser.IsBudgetCheck(queryText);
+                        var exemptionReason = isBudgetCheck ? null : GetExemptionReason(queryText);
+
+                        // Purpose enforcement: skip for budget checks and exempt queries
+                        if (!isBudgetCheck && exemptionReason == null
                             && SqlCommentParser.ExtractPurpose(queryText) == null)
                         {
                             await PgMessageWriter.WriteErrorResponseAsync(clientStream, "ERROR", "42000",
@@ -338,8 +344,8 @@ public class PgProtocolHandler : IDisposable
                             continue;
                         }
 
-                        // Query governance: read-only, dangerous query detection, table allowlists
-                        if (!SqlCommentParser.IsBudgetCheck(queryText) && !IsInternalQuery(queryText))
+                        // Query governance: skip for budget checks and exempt queries
+                        if (!isBudgetCheck && exemptionReason == null)
                         {
                             var governanceError = CheckQueryGovernance(session, queryText);
                             if (governanceError != null)
@@ -367,7 +373,7 @@ public class PgProtocolHandler : IDisposable
                             }
                         }
 
-                        if (SqlCommentParser.IsBudgetCheck(queryText))
+                        if (isBudgetCheck)
                         {
                             var remaining = _sessionManager.GetRemainingBudget(session.SessionId);
                             var budgetMsg = remaining.HasValue
@@ -376,7 +382,8 @@ public class PgProtocolHandler : IDisposable
                             await PgMessageWriter.WriteNoticeResponseAsync(clientStream, budgetMsg, proxyCts.Token);
                         }
 
-                        if (!_sessionManager.IncrementQueryCount(session.SessionId))
+                        // Exempt queries don't count against the budget
+                        if (exemptionReason == null && !_sessionManager.IncrementQueryCount(session.SessionId))
                         {
                             _queryLogger.Log(new QueryLogEntry
                             {
@@ -400,6 +407,7 @@ public class PgProtocolHandler : IDisposable
                         _sessionManager.TouchSession(session.SessionId);
 
                         currentQuery = queryText;
+                        currentExemptionReason = exemptionReason;
                         currentContext = SqlCommentParser.ExtractContext(queryText);
                         if (currentContext.Count == 0) currentContext = null;
                         sw.Restart();
@@ -686,22 +694,51 @@ public class PgProtocolHandler : IDisposable
         return null;
     }
 
-    private static bool IsInternalQuery(string sql)
+    /// <summary>
+    /// Returns an exemption reason if the query should bypass purpose enforcement
+    /// and governance checks, or null if the query requires normal enforcement.
+    /// </summary>
+    internal static string? GetExemptionReason(string sql)
     {
+        if (string.IsNullOrWhiteSpace(sql))
+            return "Empty query";
+
         var trimmed = sql.TrimStart();
-        return trimmed.Contains("pg_type", StringComparison.OrdinalIgnoreCase)
-            || trimmed.Contains("pg_catalog", StringComparison.OrdinalIgnoreCase)
-            || trimmed.Contains("pg_namespace", StringComparison.OrdinalIgnoreCase)
-            || trimmed.Contains("pg_range", StringComparison.OrdinalIgnoreCase)
-            || trimmed.Contains("pg_enum", StringComparison.OrdinalIgnoreCase)
-            || trimmed.StartsWith("SET ", StringComparison.OrdinalIgnoreCase)
-            || trimmed.StartsWith("DISCARD", StringComparison.OrdinalIgnoreCase)
-            || trimmed.StartsWith("BEGIN", StringComparison.OrdinalIgnoreCase)
-            || trimmed.StartsWith("COMMIT", StringComparison.OrdinalIgnoreCase)
-            || trimmed.StartsWith("ROLLBACK", StringComparison.OrdinalIgnoreCase)
-            || trimmed.StartsWith("VACUUM", StringComparison.OrdinalIgnoreCase)
-            || trimmed.StartsWith("TRUNCATE", StringComparison.OrdinalIgnoreCase)
-            || string.IsNullOrWhiteSpace(trimmed);
+
+        // Fast path: session/transaction commands that every PG driver sends automatically
+        if (trimmed.StartsWith("SET ", StringComparison.OrdinalIgnoreCase))
+            return "Session command (SET)";
+        if (trimmed.StartsWith("BEGIN", StringComparison.OrdinalIgnoreCase))
+            return "Transaction control";
+        if (trimmed.StartsWith("COMMIT", StringComparison.OrdinalIgnoreCase))
+            return "Transaction control";
+        if (trimmed.StartsWith("ROLLBACK", StringComparison.OrdinalIgnoreCase))
+            return "Transaction control";
+        if (trimmed.StartsWith("DISCARD", StringComparison.OrdinalIgnoreCase))
+            return "Session command (DISCARD)";
+        if (trimmed.StartsWith("SHOW ", StringComparison.OrdinalIgnoreCase))
+            return "Session command (SHOW)";
+
+        // AST path: parse and check if it's a pure catalog/metadata query
+        var analysis = QueryAnalyzer.Analyze(sql);
+
+        // Transaction commands not caught by the fast path (e.g. SAVEPOINT)
+        if (analysis.Type == StatementType.Transaction)
+            return "Transaction control";
+
+        if (analysis.Type == StatementType.Read
+            && analysis.TableNames.Count > 0
+            && analysis.TableNames.All(IsSystemTable))
+            return "Catalog metadata query";
+
+        return null;
+    }
+
+    private static bool IsSystemTable(string tableName)
+    {
+        return tableName.StartsWith("pg_catalog.", StringComparison.OrdinalIgnoreCase)
+            || tableName.StartsWith("information_schema.", StringComparison.OrdinalIgnoreCase)
+            || tableName.StartsWith("pg_", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string ComputeMd5Password(string password, string username, byte[] salt)

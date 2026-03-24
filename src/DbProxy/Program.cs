@@ -93,7 +93,12 @@ var dbFactory = sp.GetRequiredService<IDbContextFactory<GateSqlDbContext>>();
 
 // Create full schema first (Sessions, QueryLogs, etc.), then add Settings table
 await using (var initDb = await dbFactory.CreateDbContextAsync())
+{
     await initDb.Database.EnsureCreatedAsync();
+    // Migrate: add ExemptionReason column to QueryLogs (added in #49)
+    try { await initDb.Database.ExecuteSqlRawAsync("ALTER TABLE \"QueryLogs\" ADD COLUMN \"ExemptionReason\" TEXT"); }
+    catch { /* column already exists */ }
+}
 var settingsStore = new SettingsStore(dbFactory);
 await settingsStore.InitializeAsync();
 settingsStore.ApplyApiKeyToConfig(config);

@@ -37,6 +37,9 @@ public record QueryLogEntry
 
     [JsonPropertyName("error")]
     public string? Error { get; init; }
+
+    [JsonPropertyName("exemptionReason")]
+    public string? ExemptionReason { get; init; }
 }
 
 public class QueryLogger : IDisposable
@@ -84,6 +87,7 @@ public class QueryLogger : IDisposable
                     DurationMs = q.DurationMs,
                     Success = q.Success,
                     Error = q.Error,
+                    ExemptionReason = q.ExemptionReason,
                 })
                 .ToList();
         }
@@ -118,6 +122,7 @@ public class QueryLogger : IDisposable
                         DurationMs = e.DurationMs,
                         Success = e.Success,
                         Error = e.Error,
+                        ExemptionReason = e.ExemptionReason,
                     });
                 }
                 db.SaveChanges();

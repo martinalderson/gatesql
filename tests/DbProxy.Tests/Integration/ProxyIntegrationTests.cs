@@ -263,4 +263,19 @@ public class ProxyIntegrationTests : IAsyncLifetime
             Assert.Equal(2, result);
         }
     }
+
+    [Fact]
+    public async Task Query_WithPgCatalogInComment_StillRequiresPurpose()
+    {
+        var (token, _) = await _fixture.CreateSessionAsync();
+        var connStr = _fixture.BuildConnectionString(token);
+
+        await using var conn = new NpgsqlConnection(connStr);
+        await conn.OpenAsync();
+
+        // Mentioning pg_catalog in a comment should NOT bypass purpose enforcement
+        await using var cmd = new NpgsqlCommand("/* pg_catalog bypass attempt */ SELECT 1", conn);
+        var ex = await Assert.ThrowsAsync<PostgresException>(() => cmd.ExecuteScalarAsync());
+        Assert.Contains("agent_purpose", ex.MessageText);
+    }
 }
