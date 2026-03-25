@@ -495,4 +495,4 @@ Runs pgbench against both the proxy and direct PostgreSQL for comparison.
 
 ## License
 
-[Business Source License 1.1](LICENSE) - Production use is permitted. The licensed work may not be offered as a commercial database proxy, access governance, or security gateway service. Converts to Apache 2.0 four years after each release.
+[Apache License 2.0](LICENSE)

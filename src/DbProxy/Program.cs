@@ -194,7 +194,7 @@ if (isFirstRun)
         Console.WriteLine("    docker run -v gatesql-data:/app/data ...");
     }
 }
-Console.WriteLine("  BSL 1.1 — provided AS IS, no warranty. See LICENSE file.");
+Console.WriteLine("  Apache 2.0 — provided AS IS, no warranty. See LICENSE file.");
 Console.WriteLine("  https://github.com/martinalderson/gatesql");
 Console.WriteLine();
 
