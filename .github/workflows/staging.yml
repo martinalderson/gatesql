@@ -34,3 +34,11 @@ jobs:
           file: Dockerfile.demo
           push: true
           tags: gatesql/gatesql:demo-staging
+
+      - name: Build and push staging demo-opencode image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.demo-opencode
+          push: true
+          tags: gatesql/gatesql:demo-opencode-staging
