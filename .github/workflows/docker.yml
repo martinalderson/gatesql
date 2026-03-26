@@ -38,3 +38,12 @@ jobs:
           push: true
           tags: |
             gatesql/gatesql:demo
+
+      - name: Build and push demo-opencode image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.demo-opencode
+          push: true
+          tags: |
+            gatesql/gatesql:demo-opencode
