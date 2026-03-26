@@ -26,7 +26,8 @@ fi
 dotnet /app/DbProxy.dll /app/config.json > /dev/null 2>&1 &
 DOTNET_PID=$!
 
-echo "Starting GateSQL..."
+echo ""
+echo "Starting GateSQL with demo database..."
 for i in $(seq 1 30); do
     if curl -sf http://localhost:8080/api/sessions -H "X-Api-Key: pk_demo_key" > /dev/null 2>&1; then
         break
@@ -39,6 +40,7 @@ for i in $(seq 1 30); do
 done
 
 # ── Phase 4: Create session ──
+echo "Getting agent-scoped session from GateSQL..."
 RESPONSE=$(curl -s -X POST http://localhost:8080/api/sessions \
     -H "Content-Type: application/json" \
     -H "X-Api-Key: pk_demo_key" \
@@ -66,59 +68,54 @@ cat > /workspace/opencode.json << 'CONF'
 }
 CONF
 
-cat > /workspace/OPENCODE.md << EOF
+cat > /workspace/AGENTS.md << 'AGENTS_EOF'
 # GateSQL Demo Database
 
-You have access to an ecommerce demo database through GateSQL (a secure PostgreSQL proxy for AI agents).
+You have access to an ecommerce demo database via psql.
+
+## CRITICAL: Every SQL query MUST use this exact comment format or it will be rejected
+
+```
+/* <agent_purpose>your reason here</agent_purpose> */ SELECT ...
+```
+
+The `<agent_purpose>` XML tags inside the comment are mandatory. A plain comment like `/* reason */` will NOT work.
+
+Correct:
+```sql
+psql -c "/* <agent_purpose>getting total revenue</agent_purpose> */ SELECT SUM(total) FROM orders;"
+```
+
+Wrong (will be rejected):
+```sql
+psql -c "/* getting total revenue */ SELECT SUM(total) FROM orders;"
+psql -c "SELECT /* getting total revenue */ SUM(total) FROM orders;"
+```
 
 ## Connection
 
-Use psql to query the database:
-
-\`\`\`bash
-psql "$CONNECTION_STRING"
-\`\`\`
-
-## Database Schema
-
-The database contains an ecommerce store with these tables:
-- **customers** - customer profiles (name, email, city, country, tier)
-- **categories** - product categories (hierarchical)
-- **products** - product catalog (sku, name, price, cost, weight)
-- **inventory** - stock levels per product and warehouse
-- **coupons** - discount codes
-- **orders** - customer orders with status tracking
-- **order_items** - line items per order
-- **reviews** - product reviews with ratings
-- **page_views** - browse activity
-
-## Important: Purpose Comments
-
-All queries MUST include a purpose comment or they will be rejected. Format:
-
-\`\`\`sql
-SELECT /* <agent_purpose>finding top customers by revenue</agent_purpose> */
-  c.name, SUM(o.total) as revenue
-FROM customers c
-JOIN orders o ON o.customer_id = c.id
-GROUP BY c.name
-ORDER BY revenue DESC
-LIMIT 10;
-\`\`\`
-
-The comment \`/* <agent_purpose>your reason here</agent_purpose> */\` must appear in every query.
-
-Session commands (SET, BEGIN, COMMIT, ROLLBACK) and schema introspection (\dt, \d tablename) are exempt.
+psql is pre-configured — just run `psql` with no arguments, or use `psql -c "..."` for one-off queries.
 
 ## Tips
 
-- Explore the schema: \`psql "$CONNECTION_STRING" -c "\dt"\`
-- Describe a table: \`psql "$CONNECTION_STRING" -c "\d customers"\`
+- Explore the schema: `psql -c "\dt"`
+- Describe a table: `psql -c "\d customers"`
 - The session has a budget of 500 queries
-- The GateSQL dashboard at http://localhost:8080 logs all queries
-EOF
+AGENTS_EOF
 
-export DATABASE_URL="$CONNECTION_STRING"
+echo "Getting live schema for AGENTS.md..."
+SCHEMA=$(curl -s http://localhost:8080/api/schema -H "X-Api-Key: pk_demo_key")
+if [ -n "$SCHEMA" ] && ! echo "$SCHEMA" | jq -e '.error' > /dev/null 2>&1; then
+    printf "\n## Database Schema\n\n%s\n" "$SCHEMA" >> /workspace/AGENTS.md
+fi
+
+echo "Configuring psql with scoped session..."
+TOKEN=$(echo "$RESPONSE" | jq -r '.token')
+export PGHOST=localhost
+export PGPORT=15432
+export PGDATABASE=demo
+export PGUSER=agent
+export PGPASSWORD="$TOKEN"
 
 # ── Phase 6: Run OpenCode TUI ──
 if [ ! -t 0 ]; then
@@ -135,7 +132,13 @@ cleanup() {
 trap cleanup SIGTERM SIGINT EXIT
 
 echo ""
-echo "GateSQL demo ready — dashboard at http://localhost:8080"
+echo "Ready. Open your browser at http://localhost:8080 to view the dashboard."
+echo "API key: pk_demo_key"
+echo ""
+echo "Try asking: \"What can you tell me about our sales data?\""
+echo ""
+printf "\033[1mPress ENTER to launch OpenCode to query the database. Watch the queries live on the dashboard.\033[0m"
+read -r
 echo ""
 
 MODEL_FLAG=""
