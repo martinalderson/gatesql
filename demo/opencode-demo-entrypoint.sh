@@ -134,6 +134,7 @@ trap cleanup SIGTERM SIGINT EXIT
 echo ""
 echo "Ready. Open your browser at http://localhost:8080 to view the dashboard."
 echo "API key: pk_demo_key"
+echo "MCP endpoint: http://localhost:8080/mcp (use Bearer token from session)"
 echo ""
 echo "Try asking: \"What can you tell me about our sales data?\""
 echo ""

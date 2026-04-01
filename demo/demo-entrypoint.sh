@@ -35,4 +35,50 @@ trap cleanup SIGTERM SIGINT EXIT
 # Start GateSQL proxy (background, then wait)
 dotnet DbProxy.dll /app/config.json &
 DOTNET_PID=$!
+
+# Wait for GateSQL to be ready
+for i in $(seq 1 30); do
+    if curl -sf http://localhost:8080/api/sessions -H "X-Api-Key: pk_demo_key" > /dev/null 2>&1; then
+        break
+    fi
+    if [ "$i" -eq 30 ]; then
+        wait "$DOTNET_PID"
+        exit 1
+    fi
+    sleep 1
+done
+
+# Create a demo MCP session
+MCP_RESPONSE=$(curl -s -X POST http://localhost:8080/api/sessions \
+    -H "Content-Type: application/json" \
+    -H "X-Api-Key: pk_demo_key" \
+    -d '{"agentId":"mcp-demo","task":"demo session for MCP clients","queryBudget":1000,"readOnly":true}')
+
+MCP_TOKEN=$(echo "$MCP_RESPONSE" | jq -r '.token // empty')
+
+if [ -n "$MCP_TOKEN" ]; then
+    echo ""
+    echo "  ── MCP Server ──────────────────────────────────────"
+    echo ""
+    echo "  Endpoint:  http://localhost:8080/mcp"
+    echo "  Auth:      Bearer $MCP_TOKEN"
+    echo ""
+    echo "  Claude Desktop config (Settings > MCP Servers):"
+    echo ""
+    echo "    {"
+    echo "      \"mcpServers\": {"
+    echo "        \"gatesql-demo\": {"
+    echo "          \"url\": \"http://localhost:8080/mcp\","
+    echo "          \"headers\": {"
+    echo "            \"Authorization\": \"Bearer $MCP_TOKEN\""
+    echo "          }"
+    echo "        }"
+    echo "      }"
+    echo "    }"
+    echo ""
+    echo "  Session: read-only, 1000 query budget"
+    echo "  ─────────────────────────────────────────────────────"
+    echo ""
+fi
+
 wait "$DOTNET_PID"
