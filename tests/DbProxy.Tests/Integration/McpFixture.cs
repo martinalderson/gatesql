@@ -81,7 +81,7 @@ public class McpFixture : IAsyncLifetime
         builder.Services.AddSingleton(_queryLogger);
         builder.Services.AddSingleton(new SchemaIntrospector(Config));
         builder.Services.AddSingleton<GovernedQueryExecutor>();
-        builder.Services.AddScoped<McpSessionContext>();
+        builder.Services.AddSingleton<McpSessionContext>();
 
         builder.Services.AddMcpServer()
             .WithHttpTransport()

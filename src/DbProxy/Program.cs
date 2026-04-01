@@ -130,7 +130,7 @@ builder.Services.AddSingleton(schemaIntrospector);
 builder.Services.AddSingleton(settingsStore);
 builder.Services.AddSingleton(setupState);
 builder.Services.AddSingleton<GovernedQueryExecutor>();
-builder.Services.AddScoped<McpSessionContext>();
+builder.Services.AddSingleton<McpSessionContext>();
 
 if (config.Mcp.Enabled)
 {
