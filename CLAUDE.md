@@ -31,6 +31,7 @@ The proxy speaks native PostgreSQL wire protocol. It does NOT use Npgsql for the
 
 ```
 Agent ──PG wire──► Proxy (port 15432) ──PG wire──► PostgreSQL (port 5432)
+MCP Client ──HTTP──► MCP Server (port 8080/mcp) ──Npgsql──► PostgreSQL (port 5432)
 Parent ──HTTP───► Admin API (port 8080)
 Browser ──HTTP──► MVC Dashboard (port 8080)
 ```
@@ -40,6 +41,7 @@ Browser ──HTTP──► MVC Dashboard (port 8080)
 - **Session expiry**: JWT `exp` = hard cap (default 8h). Proxy-side idle timeout with sliding window (default 15min). Both enforced.
 - **Purpose enforcement**: All queries must include `/* <agent_purpose>reason</agent_purpose> */`. Queries without it are rejected with an error message. Session commands (SET, BEGIN, COMMIT, ROLLBACK, DISCARD, SHOW) and pure catalog SELECTs (pg_catalog/information_schema only) are exempt. Exempt queries are logged with a reason and don't count against the query budget.
 - **Query governance**: AST-based query analysis via `libpg_query` (PostgreSQL's actual parser). Supports read-only sessions, dangerous query detection (DROP/TRUNCATE/DELETE without WHERE), and per-session table allowlists.
+- **MCP server**: HTTP Streamable MCP at `/mcp` on dashboard port. Tools: `query_database`, `list_tables`, `describe_table`, `get_session_info`. Auth via Bearer JWT (same sessions as wire protocol). Uses `GovernedQueryExecutor` for Npgsql execution with full governance. `McpSessionContext` uses `AsyncLocal` to flow session across MCP SDK scope boundaries.
 - **Upstream auth**: Proxy handles MD5 and SCRAM-SHA-256 password auth with upstream PG.
 - **Upstream SSL/TLS**: Supports sslmode disable/prefer/require/verify-ca/verify-full for upstream connections.
 
@@ -56,8 +58,9 @@ Browser ──HTTP──► MVC Dashboard (port 8080)
 src/DbProxy/
   Protocol/          # PG wire protocol (reader, writer, handler, message types)
   Auth/              # JWT signing/validation, session manager
-  Query/             # SQL comment parser, query logger, budget tracking, AST-based query analyzer, schema introspection
+  Query/             # SQL comment parser, query logger, budget tracking, AST-based query analyzer, schema introspection, governed query executor
   Api/               # Admin API endpoints (session CRUD, schema discovery)
+  Mcp/               # MCP server (tools, session context, endpoint mapping)
   Dashboard/         # MVC dashboard (Controllers, Views, Models) — session creation, schema editor
   Configuration/     # Config model (maps to config.json)
   Data/              # EF Core entities, SQLite context, settings store

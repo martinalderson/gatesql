@@ -4,9 +4,11 @@ using DbProxy.Api;
 using DbProxy.Auth;
 using DbProxy.Configuration;
 using DbProxy.Data;
+using DbProxy.Mcp;
 using DbProxy.Protocol;
 using DbProxy.Query;
 using Microsoft.EntityFrameworkCore;
+using ModelContextProtocol;
 
 // Load config
 var configPath = args.Length > 0 ? args[0] : "config.json";
@@ -51,6 +53,8 @@ if (Environment.GetEnvironmentVariable("GATESQL_API_KEY") is { } apiKey)
 
 if (Environment.GetEnvironmentVariable("GATESQL_DB_CONNECTION") is { } dbConn)
     config.Storage.ConnectionString = dbConn;
+if (Environment.GetEnvironmentVariable("GATESQL_MCP_ENABLED") is { } mcpEnabled)
+    config.Mcp.Enabled = mcpEnabled.Equals("true", StringComparison.OrdinalIgnoreCase);
 
 // Initialize services
 var signingKeyManager = new SigningKeyManager(config.Auth.SigningKeyPath);
@@ -125,6 +129,16 @@ builder.Services.AddSingleton(queryLogger);
 builder.Services.AddSingleton(schemaIntrospector);
 builder.Services.AddSingleton(settingsStore);
 builder.Services.AddSingleton(setupState);
+builder.Services.AddSingleton<GovernedQueryExecutor>();
+builder.Services.AddSingleton<McpSessionContext>();
+
+if (config.Mcp.Enabled)
+{
+    builder.Services.AddMcpServer()
+        .WithHttpTransport()
+        .WithTools<McpTools>();
+}
+
 builder.Services.AddControllersWithViews()
     .AddRazorOptions(options =>
     {
@@ -144,6 +158,9 @@ app.UseStaticFiles(new StaticFileOptions
 
 // Admin API
 app.MapAdminApi(config, jwtAuth, sessionManager, queryLogger, schemaIntrospector);
+
+// MCP server
+app.MapMcpServer(config, jwtAuth, sessionManager);
 
 // Dashboard MVC
 if (config.Dashboard.Enabled)
@@ -175,6 +192,8 @@ Console.WriteLine(@"                                    └───────
 Console.WriteLine();
 Console.WriteLine($"  Dashboard:  http://localhost:{config.Dashboard.Port}");
 Console.WriteLine($"  Proxy:      localhost:{config.Proxy.ListenPort}");
+if (config.Mcp.Enabled)
+    Console.WriteLine($"  MCP:        http://localhost:{config.Dashboard.Port}/mcp");
 var isDemo = Environment.GetEnvironmentVariable("GATESQL_DEMO") == "true";
 if (isFirstRun || isDemo)
 {

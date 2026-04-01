@@ -20,6 +20,7 @@ public class ProxyConfig
     public LoggingSettings Logging { get; set; } = new();
     public DashboardSettings Dashboard { get; set; } = new();
     public StorageSettings Storage { get; set; } = new();
+    public McpSettings Mcp { get; set; } = new();
 }
 
 public class ProxySettings
@@ -73,4 +74,9 @@ public class StorageSettings
 {
     public string Provider { get; set; } = "sqlite";
     public string ConnectionString { get; set; } = "Data Source=data/gatesql.db";
+}
+
+public class McpSettings
+{
+    public bool Enabled { get; set; } = true;
 }

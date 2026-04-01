@@ -12,7 +12,7 @@
 
 GateSQL is an open-source PostgreSQL gateway that gives each AI agent a short-lived, scoped database session instead of raw credentials. You control what they can access, how much they can query, and every action is logged with intent.
 
-[Website](https://gatesql.dev) &middot; [Quick Start](#quick-start) &middot; [Usage](#usage) &middot; [API Reference](#api-reference) &middot; [Configuration](#configuration) &middot; [Docker](#docker)
+[Website](https://gatesql.dev) &middot; [Quick Start](#quick-start) &middot; [Usage](#usage) &middot; [MCP Server](#mcp-server) &middot; [API Reference](#api-reference) &middot; [Configuration](#configuration) &middot; [Docker](#docker)
 
 ---
 
@@ -31,11 +31,13 @@ GateSQL sits between the agent and your database as a native PostgreSQL wire pro
 │ any client│              │ audit log │              │            │
 └───────────┘              └───────────┘              └────────────┘
                                 │
-                           ┌────┴────┐
-                           │ Admin   │
-                           │ API +   │
-                           │ Dashboard│
-                           └─────────┘
+┌───────────┐          ┌───────┴──────────┐
+│ MCP Client│──HTTP──► │ Admin API        │
+│           │          │ Dashboard        │
+│ Claude    │          │ MCP Server (/mcp)│
+│ Cursor    │          └──────────────────┘
+│ Windsurf  │
+└───────────┘
 ```
 
 ## Features
@@ -48,9 +50,10 @@ GateSQL sits between the agent and your database as a native PostgreSQL wire pro
 - **Query budgets** - Set a max query count per session. When the budget is exhausted, the connection is closed.
 - **AST-powered analysis** - Every query parsed by PostgreSQL's actual parser ([libpg_query](https://github.com/pganalyze/libpg_query)). Catches CTEs with hidden writes, multi-statement injections, and more.
 - **Full audit log** - JSON-lines query logs with agent ID, session ID, purpose, query text, and timing.
+- **MCP server** - Expose governed database access as MCP tools. Any MCP client (Claude Desktop, Cursor, Windsurf) gets `query_database`, `list_tables`, `describe_table`, and `get_session_info` — with the same governance as the wire protocol proxy.
 - **Admin API + Dashboard** - Create, list, and revoke sessions over HTTP. Live dashboard shows active sessions, queries, and governance rejections.
 - **Idle & hard cap timeouts** - Sliding-window idle timeout (default 15 min) plus hard cap on total session lifetime (default 8 hours).
-- **Standard clients** - Works with psql, psycopg, asyncpg, pgx, node-postgres, JDBC, or any PostgreSQL client.
+- **Two integration paths** - Wire protocol proxy for standard PG clients (psql, psycopg, asyncpg, pgx, node-postgres, JDBC) and MCP server for AI-native tools.
 - **Low overhead** - ~2.8x overhead vs direct PostgreSQL. Zero-allocation relay with ArrayPool, flush at sync points only.
 
 ## Database Support
@@ -202,6 +205,80 @@ PGPASSWORD='eyJhbGciOiJFUz...' psql -h 127.0.0.1 -p 15432 -U agent -d postgres
 SELECT product_name, quantity FROM inventory WHERE quantity < 10;
 ```
 
+## MCP Server
+
+GateSQL exposes governed database access as an [MCP](https://modelcontextprotocol.io/) (Model Context Protocol) server. Any MCP client — Claude Desktop, Cursor, Windsurf, or custom agents — gets the same governance, audit logging, and session controls as the wire protocol proxy.
+
+The MCP server runs on the same port as the dashboard (default 8080) at `/mcp`.
+
+### Setup
+
+1. Create a session via the admin API (same as for wire protocol):
+
+```bash
+curl -X POST http://localhost:8080/api/sessions \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: your-api-key" \
+  -d '{"agentId":"claude-desktop", "task":"data analysis", "readOnly":true, "queryBudget":500}'
+```
+
+2. Add to your MCP client config using the `token` from the response:
+
+**Claude Desktop** (Settings > MCP Servers):
+
+```json
+{
+  "mcpServers": {
+    "gatesql": {
+      "url": "http://localhost:8080/mcp",
+      "headers": {
+        "Authorization": "Bearer eyJhbGciOiJFUz..."
+      }
+    }
+  }
+}
+```
+
+**Claude Code** (`~/.claude/settings.json`):
+
+```json
+{
+  "mcpServers": {
+    "gatesql": {
+      "url": "http://localhost:8080/mcp",
+      "headers": {
+        "Authorization": "Bearer eyJhbGciOiJFUz..."
+      }
+    }
+  }
+}
+```
+
+### Tools
+
+| Tool | Description |
+|------|-------------|
+| `query_database` | Execute SQL with full governance (read-only, allowlist, budget, dangerous query detection). Requires `sql` and `purpose` parameters. |
+| `list_tables` | List available tables with estimated row counts. Respects session allowlists. Does not count against budget. |
+| `describe_table` | Get columns, types, and annotations for a table. Does not count against budget. |
+| `get_session_info` | Check remaining query budget, time left, and session permissions. |
+
+All queries through `query_database` are governed by the same rules as the wire protocol proxy: purpose is logged for audit, read-only sessions block writes, dangerous queries are detected via AST analysis, and table allowlists are enforced.
+
+### Configuration
+
+MCP is enabled by default. To disable:
+
+```json
+{
+  "mcp": {
+    "enabled": false
+  }
+}
+```
+
+Or via environment variable: `GATESQL_MCP_ENABLED=false`
+
 ## API Reference
 
 All endpoints require the `X-Api-Key` header.
@@ -323,7 +400,8 @@ Here's a full `config.json` example:
 | `auth` | `parentApiKeys` | | API keys for session creation |
 | `logging` | `directory` | `logs` | Directory for JSON-lines query logs |
 | `dashboard` | `enabled` | `true` | Enable the admin dashboard |
-| `dashboard` | `port` | `8080` | Dashboard and API port |
+| `dashboard` | `port` | `8080` | Dashboard, API, and MCP port |
+| `mcp` | `enabled` | `true` | Enable the MCP server at `/mcp` |
 
 ### Environment variable overrides
 
@@ -341,6 +419,7 @@ All upstream settings can be overridden with environment variables, useful for D
 | `GATESQL_UPSTREAM_SSL_CLIENT_CERT` | Client cert path |
 | `GATESQL_UPSTREAM_SSL_CLIENT_KEY` | Client key path |
 | `GATESQL_API_KEY` | Sets a single API key |
+| `GATESQL_MCP_ENABLED` | Enable/disable MCP server (`true`/`false`) |
 | `GATESQL_DB_CONNECTION` | SQLite connection string for session storage |
 
 ## Purpose Enforcement
@@ -390,6 +469,8 @@ docker run -p 15432:15432 -p 8080:8080 gatesql/gatesql:demo
 ```
 
 Open http://localhost:8080 to see the dashboard. The API key is `pk_demo_key`. The demo database includes customers, orders, products, reviews, and more.
+
+The demo automatically creates an MCP session and prints a ready-to-paste Claude Desktop config. Copy it into your MCP client settings and start querying.
 
 ### Basic
 
