@@ -56,6 +56,9 @@ public class PgProtocolHandler : IDisposable
         _listener.Start();
         _logger.LogInformation("PG proxy listening on {Host}:{Port}", _config.Proxy.ListenHost, _config.Proxy.ListenPort);
 
+        if (_tlsCert == null)
+            _logger.LogWarning("TLS is not configured — client connections (including JWT tokens) will be transmitted in cleartext. Set proxy.tlsCertPath and proxy.tlsKeyPath in config to enable TLS.");
+
         while (!_cts.Token.IsCancellationRequested)
         {
             try
@@ -185,12 +188,10 @@ public class PgProtocolHandler : IDisposable
                 using var upstreamConnection = await ConnectUpstreamAsync(ct);
                 if (upstreamConnection == null)
                 {
+                    _logger.LogError("Cannot connect to upstream PostgreSQL at {Host}:{Port} as user \"{Username}\"",
+                        _config.Upstream.Host, _config.Upstream.Port, _config.Upstream.Username);
                     await PgMessageWriter.WriteErrorResponseAsync(clientStream, "FATAL", "08006",
-                        $"Cannot connect to upstream PostgreSQL at {_config.Upstream.Host}:{_config.Upstream.Port}.\n\n" +
-                        "Troubleshooting:\n" +
-                        $"  1. Is PostgreSQL running?  pg_isready -h {_config.Upstream.Host} -p {_config.Upstream.Port}\n" +
-                        $"  2. Are the credentials correct for user \"{_config.Upstream.Username}\"?\n" +
-                        "  3. Running in Docker? Use host.docker.internal instead of localhost.", ct);
+                        "Cannot connect to upstream database. Please contact your administrator.", ct);
                     return;
                 }
 
@@ -277,7 +278,7 @@ public class PgProtocolHandler : IDisposable
 
             while (!proxyCts.Token.IsCancellationRequested)
             {
-                if (++messageCount % 100 == 0)
+                if (++messageCount % 10 == 0)
                 {
                     var reason = _sessionManager.GetInvalidReason(session.SessionId);
                     if (reason != null)
@@ -676,8 +677,8 @@ public class PgProtocolHandler : IDisposable
     {
         var analysis = QueryAnalyzer.Analyze(queryText);
 
-        // Read-only enforcement
-        if (session.IsReadOnly && analysis.Type is StatementType.Write or StatementType.Ddl)
+        // Read-only enforcement (fail-closed: only allow known-safe types)
+        if (session.IsReadOnly && analysis.Type is not (StatementType.Read or StatementType.Transaction or StatementType.Utility))
         {
             return $"Query rejected — session is read-only.\n" +
                    $"This session only allows SELECT, EXPLAIN, and SHOW queries.\n" +

@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json.Serialization;
 using DbProxy.Auth;
 using DbProxy.Configuration;
@@ -7,6 +9,22 @@ namespace DbProxy.Api;
 
 public static class AdminApiEndpoints
 {
+    private static bool ValidateApiKey(string? apiKey, ProxyConfig config)
+    {
+        if (string.IsNullOrEmpty(apiKey))
+            return false;
+
+        var inputBytes = Encoding.UTF8.GetBytes(apiKey);
+        foreach (var k in config.Auth.ParentApiKeys)
+        {
+            var keyBytes = Encoding.UTF8.GetBytes(k.Key);
+            if (inputBytes.Length == keyBytes.Length &&
+                CryptographicOperations.FixedTimeEquals(inputBytes, keyBytes))
+                return true;
+        }
+        return false;
+    }
+
     public static void MapAdminApi(this WebApplication app, ProxyConfig config, JwtAuthenticator jwtAuth, SessionManager sessionManager, QueryLogger queryLogger, SchemaIntrospector? schemaIntrospector = null)
     {
         var api = app.MapGroup("/api");
@@ -14,7 +32,7 @@ public static class AdminApiEndpoints
         api.MapPost("/sessions", (CreateSessionRequest request, HttpContext ctx) =>
         {
             var apiKey = ctx.Request.Headers["X-Api-Key"].FirstOrDefault();
-            if (string.IsNullOrEmpty(apiKey) || !config.Auth.ParentApiKeys.Any(k => k.Key == apiKey))
+            if (!ValidateApiKey(apiKey, config))
                 return Results.Json(new { error = "Invalid API key" }, statusCode: 401);
 
             var sessionId = $"sess_{Guid.NewGuid():N}";
@@ -55,7 +73,7 @@ public static class AdminApiEndpoints
         api.MapGet("/sessions", (HttpContext ctx) =>
         {
             var apiKey = ctx.Request.Headers["X-Api-Key"].FirstOrDefault();
-            if (string.IsNullOrEmpty(apiKey) || !config.Auth.ParentApiKeys.Any(k => k.Key == apiKey))
+            if (!ValidateApiKey(apiKey, config))
                 return Results.Json(new { error = "Invalid API key" }, statusCode: 401);
 
             var sessions = sessionManager.GetAllSessions()
@@ -82,7 +100,7 @@ public static class AdminApiEndpoints
         api.MapDelete("/sessions/{sessionId}", (string sessionId, HttpContext ctx) =>
         {
             var apiKey = ctx.Request.Headers["X-Api-Key"].FirstOrDefault();
-            if (string.IsNullOrEmpty(apiKey) || !config.Auth.ParentApiKeys.Any(k => k.Key == apiKey))
+            if (!ValidateApiKey(apiKey, config))
                 return Results.Json(new { error = "Invalid API key" }, statusCode: 401);
 
             if (sessionManager.RevokeSession(sessionId))
@@ -94,7 +112,7 @@ public static class AdminApiEndpoints
         api.MapGet("/queries", (HttpContext ctx, int? count) =>
         {
             var apiKey = ctx.Request.Headers["X-Api-Key"].FirstOrDefault();
-            if (string.IsNullOrEmpty(apiKey) || !config.Auth.ParentApiKeys.Any(k => k.Key == apiKey))
+            if (!ValidateApiKey(apiKey, config))
                 return Results.Json(new { error = "Invalid API key" }, statusCode: 401);
 
             var queries = queryLogger.GetRecentQueries(count ?? 100);
@@ -104,7 +122,7 @@ public static class AdminApiEndpoints
         api.MapGet("/schema", async (HttpContext ctx) =>
         {
             var apiKey = ctx.Request.Headers["X-Api-Key"].FirstOrDefault();
-            if (string.IsNullOrEmpty(apiKey) || !config.Auth.ParentApiKeys.Any(k => k.Key == apiKey))
+            if (!ValidateApiKey(apiKey, config))
                 return Results.Json(new { error = "Invalid API key" }, statusCode: 401);
 
             if (schemaIntrospector == null)
@@ -124,7 +142,7 @@ public static class AdminApiEndpoints
         api.MapGet("/schema/{tableName}/annotations", async (string tableName, HttpContext ctx) =>
         {
             var apiKey = ctx.Request.Headers["X-Api-Key"].FirstOrDefault();
-            if (string.IsNullOrEmpty(apiKey) || !config.Auth.ParentApiKeys.Any(k => k.Key == apiKey))
+            if (!ValidateApiKey(apiKey, config))
                 return Results.Json(new { error = "Invalid API key" }, statusCode: 401);
 
             if (schemaIntrospector == null)
@@ -139,7 +157,7 @@ public static class AdminApiEndpoints
         api.MapPut("/schema/{tableName}/annotations", async (string tableName, SchemaAnnotationRequest request, HttpContext ctx) =>
         {
             var apiKey = ctx.Request.Headers["X-Api-Key"].FirstOrDefault();
-            if (string.IsNullOrEmpty(apiKey) || !config.Auth.ParentApiKeys.Any(k => k.Key == apiKey))
+            if (!ValidateApiKey(apiKey, config))
                 return Results.Json(new { error = "Invalid API key" }, statusCode: 401);
 
             if (schemaIntrospector == null)

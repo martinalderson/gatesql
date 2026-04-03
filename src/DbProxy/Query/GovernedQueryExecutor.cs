@@ -39,7 +39,8 @@ public class GovernedQueryExecutor
         int maxRows = 500, CancellationToken ct = default)
     {
         maxRows = Math.Clamp(maxRows, 1, 5000);
-        var fullSql = $"/* <agent_purpose>{purpose}</agent_purpose> */ {sql}";
+        var safePurpose = purpose.Replace("*/", "* /");
+        var fullSql = $"/* <agent_purpose>{safePurpose}</agent_purpose> */ {sql}";
         var sw = Stopwatch.StartNew();
 
         // Validate session is still active
@@ -56,8 +57,8 @@ public class GovernedQueryExecutor
         // Analyze query
         var analysis = QueryAnalyzer.Analyze(sql);
 
-        // Read-only enforcement
-        if (session.IsReadOnly && analysis.Type is StatementType.Write or StatementType.Ddl)
+        // Read-only enforcement (fail-closed: only allow known-safe types)
+        if (session.IsReadOnly && analysis.Type is not (StatementType.Read or StatementType.Transaction or StatementType.Utility))
         {
             LogRejection(session, fullSql, "Session is read-only");
             return new QueryResult

@@ -74,8 +74,8 @@ public class QueryGovernanceTests : IAsyncLifetime
         var (token, _) = await CreateSessionAsync(readOnly: true);
         await using var conn = await ConnectAsync(token);
 
-        // Create the table with a non-read-only session first
-        var (rwToken, _) = await CreateSessionAsync(readOnly: false);
+        // Create the table with a non-read-only, non-dangerous-blocking session first
+        var (rwToken, _) = await CreateSessionAsync(readOnly: false, dangerousQueryMode: "off");
         await using var rwConn = await ConnectAsync(rwToken);
         await using var createCmd = new NpgsqlCommand(WithPurpose("CREATE TABLE IF NOT EXISTS test_ins (id int)"), rwConn);
         await createCmd.ExecuteNonQueryAsync();
@@ -100,10 +100,14 @@ public class QueryGovernanceTests : IAsyncLifetime
     [Fact]
     public async Task NonReadOnly_InsertSucceeds()
     {
+        // Setup table with unrestricted session
+        var (setupToken, _) = await CreateSessionAsync(readOnly: false, dangerousQueryMode: "off");
+        await using var setupConn = await ConnectAsync(setupToken);
+        await using var createCmd = new NpgsqlCommand(WithPurpose("CREATE TABLE IF NOT EXISTS test_write (id int)"), setupConn);
+        await createCmd.ExecuteNonQueryAsync();
+
         var (token, _) = await CreateSessionAsync(readOnly: false);
         await using var conn = await ConnectAsync(token);
-        await using var createCmd = new NpgsqlCommand(WithPurpose("CREATE TABLE IF NOT EXISTS test_write (id int)"), conn);
-        await createCmd.ExecuteNonQueryAsync();
         await using var cmd = new NpgsqlCommand(WithPurpose("INSERT INTO test_write (id) VALUES (1)"), conn);
         await cmd.ExecuteNonQueryAsync(); // Should not throw
     }
@@ -113,10 +117,13 @@ public class QueryGovernanceTests : IAsyncLifetime
     [Fact]
     public async Task DangerousBlock_DeleteWithoutWhereRejected()
     {
+        var (setupToken, _) = await CreateSessionAsync(dangerousQueryMode: "off");
+        await using var setupConn = await ConnectAsync(setupToken);
+        await using var createCmd = new NpgsqlCommand(WithPurpose("CREATE TABLE IF NOT EXISTS test_danger (id int)"), setupConn);
+        await createCmd.ExecuteNonQueryAsync();
+
         var (token, _) = await CreateSessionAsync(dangerousQueryMode: "block");
         await using var conn = await ConnectAsync(token);
-        await using var createCmd = new NpgsqlCommand(WithPurpose("CREATE TABLE IF NOT EXISTS test_danger (id int)"), conn);
-        await createCmd.ExecuteNonQueryAsync();
 
         await using var cmd = new NpgsqlCommand(WithPurpose("DELETE FROM test_danger"), conn);
         var ex = await Assert.ThrowsAsync<PostgresException>(() => cmd.ExecuteNonQueryAsync());
@@ -127,10 +134,13 @@ public class QueryGovernanceTests : IAsyncLifetime
     [Fact]
     public async Task DangerousBlock_DeleteWithWhereAllowed()
     {
+        var (setupToken, _) = await CreateSessionAsync(dangerousQueryMode: "off");
+        await using var setupConn = await ConnectAsync(setupToken);
+        await using var createCmd = new NpgsqlCommand(WithPurpose("CREATE TABLE IF NOT EXISTS test_danger2 (id int)"), setupConn);
+        await createCmd.ExecuteNonQueryAsync();
+
         var (token, _) = await CreateSessionAsync(dangerousQueryMode: "block");
         await using var conn = await ConnectAsync(token);
-        await using var createCmd = new NpgsqlCommand(WithPurpose("CREATE TABLE IF NOT EXISTS test_danger2 (id int)"), conn);
-        await createCmd.ExecuteNonQueryAsync();
 
         await using var cmd = new NpgsqlCommand(WithPurpose("DELETE FROM test_danger2 WHERE id = 999"), conn);
         await cmd.ExecuteNonQueryAsync(); // Should not throw
@@ -150,10 +160,13 @@ public class QueryGovernanceTests : IAsyncLifetime
     [Fact]
     public async Task DangerousBlock_TruncateRejected()
     {
+        var (setupToken, _) = await CreateSessionAsync(dangerousQueryMode: "off");
+        await using var setupConn = await ConnectAsync(setupToken);
+        await using var createCmd = new NpgsqlCommand(WithPurpose("CREATE TABLE IF NOT EXISTS test_trunc (id int)"), setupConn);
+        await createCmd.ExecuteNonQueryAsync();
+
         var (token, _) = await CreateSessionAsync(dangerousQueryMode: "block");
         await using var conn = await ConnectAsync(token);
-        await using var createCmd = new NpgsqlCommand(WithPurpose("CREATE TABLE IF NOT EXISTS test_trunc (id int)"), conn);
-        await createCmd.ExecuteNonQueryAsync();
 
         await using var cmd = new NpgsqlCommand(WithPurpose("TRUNCATE test_trunc"), conn);
         var ex = await Assert.ThrowsAsync<PostgresException>(() => cmd.ExecuteNonQueryAsync());
@@ -163,10 +176,13 @@ public class QueryGovernanceTests : IAsyncLifetime
     [Fact]
     public async Task DangerousBlock_UpdateWithoutWhereRejected()
     {
+        var (setupToken, _) = await CreateSessionAsync(dangerousQueryMode: "off");
+        await using var setupConn = await ConnectAsync(setupToken);
+        await using var createCmd = new NpgsqlCommand(WithPurpose("CREATE TABLE IF NOT EXISTS test_upd (id int, name text)"), setupConn);
+        await createCmd.ExecuteNonQueryAsync();
+
         var (token, _) = await CreateSessionAsync(dangerousQueryMode: "block");
         await using var conn = await ConnectAsync(token);
-        await using var createCmd = new NpgsqlCommand(WithPurpose("CREATE TABLE IF NOT EXISTS test_upd (id int, name text)"), conn);
-        await createCmd.ExecuteNonQueryAsync();
 
         await using var cmd = new NpgsqlCommand(WithPurpose("UPDATE test_upd SET name = 'x'"), conn);
         var ex = await Assert.ThrowsAsync<PostgresException>(() => cmd.ExecuteNonQueryAsync());
@@ -203,8 +219,8 @@ public class QueryGovernanceTests : IAsyncLifetime
     [Fact]
     public async Task AllowedTables_AllowedTableSucceeds()
     {
-        // First create the table
-        var (setupToken, _) = await CreateSessionAsync();
+        // First create the table with unrestricted session
+        var (setupToken, _) = await CreateSessionAsync(dangerousQueryMode: "off");
         await using var setupConn = await ConnectAsync(setupToken);
         await using var createCmd = new NpgsqlCommand(WithPurpose("CREATE TABLE IF NOT EXISTS allowed_test (id int)"), setupConn);
         await createCmd.ExecuteNonQueryAsync();
@@ -218,8 +234,8 @@ public class QueryGovernanceTests : IAsyncLifetime
     [Fact]
     public async Task AllowedTables_DisallowedTableRejected()
     {
-        // First create both tables
-        var (setupToken, _) = await CreateSessionAsync();
+        // First create both tables with unrestricted session
+        var (setupToken, _) = await CreateSessionAsync(dangerousQueryMode: "off");
         await using var setupConn = await ConnectAsync(setupToken);
         await using var c1 = new NpgsqlCommand(WithPurpose("CREATE TABLE IF NOT EXISTS allowed_orders (id int)"), setupConn);
         await c1.ExecuteNonQueryAsync();
@@ -237,7 +253,7 @@ public class QueryGovernanceTests : IAsyncLifetime
     [Fact]
     public async Task AllowedTables_JoinWithDisallowedTableRejected()
     {
-        var (setupToken, _) = await CreateSessionAsync();
+        var (setupToken, _) = await CreateSessionAsync(dangerousQueryMode: "off");
         await using var setupConn = await ConnectAsync(setupToken);
         await using var c1 = new NpgsqlCommand(WithPurpose("CREATE TABLE IF NOT EXISTS join_allowed (id int)"), setupConn);
         await c1.ExecuteNonQueryAsync();
@@ -255,7 +271,7 @@ public class QueryGovernanceTests : IAsyncLifetime
     [Fact]
     public async Task AllowedTables_NullAllowsEverything()
     {
-        var (setupToken, _) = await CreateSessionAsync();
+        var (setupToken, _) = await CreateSessionAsync(dangerousQueryMode: "off");
         await using var setupConn = await ConnectAsync(setupToken);
         await using var c1 = new NpgsqlCommand(WithPurpose("CREATE TABLE IF NOT EXISTS any_table (id int)"), setupConn);
         await c1.ExecuteNonQueryAsync();
@@ -263,6 +279,44 @@ public class QueryGovernanceTests : IAsyncLifetime
         var (token, _) = await CreateSessionAsync(allowedTables: null);
         await using var conn = await ConnectAsync(token);
         await using var cmd = new NpgsqlCommand(WithPurpose("SELECT * FROM any_table"), conn);
+        await cmd.ExecuteNonQueryAsync(); // Should not throw
+    }
+
+    // --- Fail-closed: DDL blocked by dangerous query mode ---
+
+    [Fact]
+    public async Task DangerousBlock_CreateTableRejected()
+    {
+        var (token, _) = await CreateSessionAsync(dangerousQueryMode: "block");
+        await using var conn = await ConnectAsync(token);
+        await using var cmd = new NpgsqlCommand(WithPurpose("CREATE TABLE IF NOT EXISTS should_be_blocked (id int)"), conn);
+        var ex = await Assert.ThrowsAsync<PostgresException>(() => cmd.ExecuteNonQueryAsync());
+        Assert.Equal("42501", ex.SqlState);
+        Assert.Contains("dangerous", ex.MessageText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task DangerousBlock_AlterTableRejected()
+    {
+        var (setupToken, _) = await CreateSessionAsync(dangerousQueryMode: "off");
+        await using var setupConn = await ConnectAsync(setupToken);
+        await using var createCmd = new NpgsqlCommand(WithPurpose("CREATE TABLE IF NOT EXISTS test_alter (id int)"), setupConn);
+        await createCmd.ExecuteNonQueryAsync();
+
+        var (token, _) = await CreateSessionAsync(dangerousQueryMode: "block");
+        await using var conn = await ConnectAsync(token);
+        await using var cmd = new NpgsqlCommand(WithPurpose("ALTER TABLE test_alter ADD COLUMN extra text"), conn);
+        var ex = await Assert.ThrowsAsync<PostgresException>(() => cmd.ExecuteNonQueryAsync());
+        Assert.Equal("42501", ex.SqlState);
+        Assert.Contains("dangerous", ex.MessageText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task DangerousOff_CreateTableAllowed()
+    {
+        var (token, _) = await CreateSessionAsync(dangerousQueryMode: "off");
+        await using var conn = await ConnectAsync(token);
+        await using var cmd = new NpgsqlCommand(WithPurpose("CREATE TABLE IF NOT EXISTS test_off_create (id int)"), conn);
         await cmd.ExecuteNonQueryAsync(); // Should not throw
     }
 

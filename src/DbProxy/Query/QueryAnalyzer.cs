@@ -26,7 +26,7 @@ public static class QueryAnalyzer
     {
         var result = Parser.Parse(sql);
         if (!result.IsSuccess || result.Value == null)
-            return new QueryAnalysis { Type = StatementType.Unknown };
+            return new QueryAnalysis { Type = StatementType.Unknown, IsDangerous = true, DangerReason = "Unparseable SQL" };
 
         var parsed = result.Value;
         if (parsed.Stmts.Count == 0)
@@ -126,14 +126,40 @@ public static class QueryAnalyzer
 
             case Node.NodeOneofCase.CreateStmt:
                 AddRangeVar(node.CreateStmt.Relation, tables);
+                isDangerous = true;
+                dangerReason ??= "CREATE statement";
                 return StatementType.Ddl;
 
             case Node.NodeOneofCase.AlterTableStmt:
                 AddRangeVar(node.AlterTableStmt.Relation, tables);
+                isDangerous = true;
+                dangerReason ??= "ALTER TABLE statement";
                 return StatementType.Ddl;
 
             case Node.NodeOneofCase.IndexStmt:
                 AddRangeVar(node.IndexStmt.Relation, tables);
+                isDangerous = true;
+                dangerReason ??= "CREATE INDEX statement";
+                return StatementType.Ddl;
+
+            case Node.NodeOneofCase.GrantStmt:
+                isDangerous = true;
+                dangerReason ??= "GRANT statement";
+                return StatementType.Ddl;
+
+            case Node.NodeOneofCase.CreateFunctionStmt:
+                isDangerous = true;
+                dangerReason ??= "CREATE FUNCTION statement";
+                return StatementType.Ddl;
+
+            case Node.NodeOneofCase.CreateRoleStmt:
+                isDangerous = true;
+                dangerReason ??= "CREATE ROLE statement";
+                return StatementType.Ddl;
+
+            case Node.NodeOneofCase.CopyStmt:
+                isDangerous = true;
+                dangerReason ??= "COPY statement";
                 return StatementType.Ddl;
 
             case Node.NodeOneofCase.TransactionStmt:
@@ -151,6 +177,8 @@ public static class QueryAnalyzer
                 return StatementType.Read;
 
             default:
+                isDangerous = true;
+                dangerReason ??= "Unrecognized statement type";
                 return StatementType.Unknown;
         }
     }

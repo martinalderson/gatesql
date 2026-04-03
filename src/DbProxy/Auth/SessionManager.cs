@@ -11,7 +11,8 @@ public record AgentSession
     public required string AgentId { get; init; }
     public required string Task { get; init; }
     public int? QueryBudget { get; init; }
-    public int QueriesUsed { get; set; }
+    internal int _queriesUsed;
+    public int QueriesUsed { get => _queriesUsed; set => _queriesUsed = value; }
     public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
     public DateTime ExpiresAt { get; init; }
     public DateTime LastActivityAt { get; set; } = DateTime.UtcNow;
@@ -155,10 +156,19 @@ public class SessionManager : IDisposable
         if (!_sessions.TryGetValue(sessionId, out var session))
             return false;
 
-        if (session.QueryBudget.HasValue && session.QueriesUsed >= session.QueryBudget.Value)
-            return false;
+        if (!session.QueryBudget.HasValue)
+        {
+            Interlocked.Increment(ref session._queriesUsed);
+            return true;
+        }
 
-        session.QueriesUsed++;
+        var newCount = Interlocked.Increment(ref session._queriesUsed);
+        if (newCount > session.QueryBudget.Value)
+        {
+            Interlocked.Decrement(ref session._queriesUsed);
+            return false;
+        }
+
         return true;
     }
 

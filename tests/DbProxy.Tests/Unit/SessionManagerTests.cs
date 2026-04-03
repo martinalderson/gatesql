@@ -81,6 +81,31 @@ public class SessionManagerTests : IDisposable
     }
 
     [Fact]
+    public void IncrementQueryCount_ConcurrentAccess_DoesNotExceedBudget()
+    {
+        var session = CreateTestSession("sess_concurrent", budget: 100);
+
+        var succeeded = 0;
+        var tasks = new Task[20];
+        for (int t = 0; t < tasks.Length; t++)
+        {
+            tasks[t] = Task.Run(() =>
+            {
+                for (int i = 0; i < 50; i++)
+                {
+                    if (_manager.IncrementQueryCount("sess_concurrent"))
+                        Interlocked.Increment(ref succeeded);
+                }
+            });
+        }
+
+        Task.WaitAll(tasks);
+
+        Assert.Equal(100, succeeded);
+        Assert.Equal(100, session.QueriesUsed);
+    }
+
+    [Fact]
     public void GetRemainingBudget_DecreasesCorrectly()
     {
         CreateTestSession(budget: 5);

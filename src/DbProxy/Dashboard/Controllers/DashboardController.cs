@@ -51,6 +51,9 @@ public class DashboardController : Controller
     [SkipApiKeyAuth]
     public async Task<IActionResult> SetupTest(string host, int port, string database, string username, string password)
     {
+        if (!_setupState.SetupRequired)
+            return Unauthorized();
+
         try
         {
             var connStr = $"Host={host};Port={port};Database={database};Username={username};Password={password};Timeout=5";
@@ -70,6 +73,9 @@ public class DashboardController : Controller
     [SkipApiKeyAuth]
     public async Task<IActionResult> SetupSave(string host, int port, string database, string username, string password, string sslMode)
     {
+        if (!_setupState.SetupRequired)
+            return Unauthorized();
+
         if (!Enum.TryParse<UpstreamSslMode>(sslMode, ignoreCase: true, out var parsedSslMode))
             parsedSslMode = UpstreamSslMode.Disable;
 
@@ -119,7 +125,7 @@ public class DashboardController : Controller
     [SkipApiKeyAuth]
     public IActionResult LoginPost(string apiKey)
     {
-        if (string.IsNullOrEmpty(apiKey) || !_config.Auth.ParentApiKeys.Any(k => k.Key == apiKey))
+        if (!ApiKeyAuthAttribute.TimingSafeKeyCheck(apiKey, _config))
         {
             ViewBag.Error = "Invalid API key";
             return View("Login");

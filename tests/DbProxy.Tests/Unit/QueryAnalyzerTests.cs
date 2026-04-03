@@ -230,11 +230,12 @@ public class QueryAnalyzerTests
     }
 
     [Fact]
-    public void InvalidSql_ReturnsUnknown()
+    public void InvalidSql_ReturnsUnknownAndDangerous()
     {
         var result = QueryAnalyzer.Analyze("NOT VALID SQL AT ALL !!!");
         Assert.Equal(StatementType.Unknown, result.Type);
-        Assert.False(result.IsDangerous);
+        Assert.True(result.IsDangerous);
+        Assert.Contains("Unparseable", result.DangerReason);
     }
 
     [Fact]
@@ -242,6 +243,71 @@ public class QueryAnalyzerTests
     {
         var result = QueryAnalyzer.Analyze("");
         Assert.Equal(StatementType.Unknown, result.Type);
+    }
+
+    // --- Fail-closed governance (security hardening) ---
+
+    [Fact]
+    public void CreateTable_IsDangerous()
+    {
+        var result = QueryAnalyzer.Analyze("CREATE TABLE foo (id int)");
+        Assert.Equal(StatementType.Ddl, result.Type);
+        Assert.True(result.IsDangerous);
+        Assert.Contains("CREATE", result.DangerReason);
+    }
+
+    [Fact]
+    public void AlterTable_IsDangerous()
+    {
+        var result = QueryAnalyzer.Analyze("ALTER TABLE orders ADD COLUMN backdoor text");
+        Assert.Equal(StatementType.Ddl, result.Type);
+        Assert.True(result.IsDangerous);
+        Assert.Contains("ALTER TABLE", result.DangerReason);
+    }
+
+    [Fact]
+    public void CreateIndex_IsDangerous()
+    {
+        var result = QueryAnalyzer.Analyze("CREATE INDEX idx_orders ON orders (id)");
+        Assert.Equal(StatementType.Ddl, result.Type);
+        Assert.True(result.IsDangerous);
+        Assert.Contains("CREATE INDEX", result.DangerReason);
+    }
+
+    [Fact]
+    public void Grant_IsDdlAndDangerous()
+    {
+        var result = QueryAnalyzer.Analyze("GRANT ALL ON orders TO public");
+        Assert.Equal(StatementType.Ddl, result.Type);
+        Assert.True(result.IsDangerous);
+        Assert.Contains("GRANT", result.DangerReason);
+    }
+
+    [Fact]
+    public void CreateFunction_IsDdlAndDangerous()
+    {
+        var result = QueryAnalyzer.Analyze("CREATE FUNCTION evil() RETURNS void AS $$ BEGIN END; $$ LANGUAGE plpgsql");
+        Assert.Equal(StatementType.Ddl, result.Type);
+        Assert.True(result.IsDangerous);
+        Assert.Contains("CREATE FUNCTION", result.DangerReason);
+    }
+
+    [Fact]
+    public void CreateRole_IsDdlAndDangerous()
+    {
+        var result = QueryAnalyzer.Analyze("CREATE ROLE backdoor WITH LOGIN PASSWORD 'secret'");
+        Assert.Equal(StatementType.Ddl, result.Type);
+        Assert.True(result.IsDangerous);
+        Assert.Contains("CREATE ROLE", result.DangerReason);
+    }
+
+    [Fact]
+    public void Copy_IsDdlAndDangerous()
+    {
+        var result = QueryAnalyzer.Analyze("COPY orders TO '/tmp/data.csv'");
+        Assert.Equal(StatementType.Ddl, result.Type);
+        Assert.True(result.IsDangerous);
+        Assert.Contains("COPY", result.DangerReason);
     }
 
     // --- Table Allowlist ---
