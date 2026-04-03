@@ -108,14 +108,15 @@ public class ProxyFixture : IAsyncLifetime
     public async Task<(string token, string sessionId)> CreateSessionAsync(
         string agentId = "test-agent",
         string task = "test-task",
-        int? queryBudget = null)
+        int? queryBudget = null,
+        string dangerousQueryMode = "off")
     {
         using var http = new HttpClient();
         http.DefaultRequestHeaders.Add("X-Api-Key", ApiKey);
 
         var response = await http.PostAsJsonAsync(
             $"http://127.0.0.1:{ApiPort}/api/sessions",
-            new { agentId, task, queryBudget });
+            new { agentId, task, queryBudget, dangerousQueryMode });
 
         response.EnsureSuccessStatusCode();
 

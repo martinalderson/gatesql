@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using DbProxy.Configuration;
 using DbProxy.Dashboard.Controllers;
 using Microsoft.AspNetCore.Mvc;
@@ -30,9 +32,25 @@ public class ApiKeyAuthAttribute : Attribute, IAuthorizationFilter
         var config = context.HttpContext.RequestServices.GetRequiredService<ProxyConfig>();
         var cookie = context.HttpContext.Request.Cookies["gatesql_key"];
 
-        if (string.IsNullOrEmpty(cookie) || !config.Auth.ParentApiKeys.Any(k => k.Key == cookie))
+        if (!TimingSafeKeyCheck(cookie, config))
         {
             context.Result = new RedirectToActionResult("Login", "Dashboard", null);
         }
+    }
+
+    internal static bool TimingSafeKeyCheck(string? input, ProxyConfig config)
+    {
+        if (string.IsNullOrEmpty(input))
+            return false;
+
+        var inputBytes = Encoding.UTF8.GetBytes(input);
+        foreach (var k in config.Auth.ParentApiKeys)
+        {
+            var keyBytes = Encoding.UTF8.GetBytes(k.Key);
+            if (inputBytes.Length == keyBytes.Length &&
+                CryptographicOperations.FixedTimeEquals(inputBytes, keyBytes))
+                return true;
+        }
+        return false;
     }
 }
