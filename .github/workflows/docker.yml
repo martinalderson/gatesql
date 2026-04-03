@@ -53,3 +53,13 @@ jobs:
           push: true
           tags: |
             gatesql/gatesql:demo-opencode
+
+  test:
+    runs-on: self-hosted
+    needs: build
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Smoke test Docker images
+        run: ./scripts/test-docker.sh
